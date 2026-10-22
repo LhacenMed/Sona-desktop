@@ -1,0 +1,9 @@
+build/
+CMakeUserPresets.json
+*.user
+*.exe
+*.dll
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json

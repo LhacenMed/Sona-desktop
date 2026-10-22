@@ -1,0 +1,30 @@
+// CMake generates sona.rc from this file; the app identity lives in the top-level CMakeLists.txt.
+#include <winver.h>
+
+IDI_ICON1 ICON "@CMAKE_CURRENT_SOURCE_DIR@/platform/windows/sona.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "@SONA_PUBLISHER@"
+            // Windows shows this as the app's name in "Open with", Task Manager and the taskbar.
+            VALUE "FileDescription", "@SONA_APP_NAME@"
+            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "InternalName", "sona"
+            VALUE "OriginalFilename", "sona.exe"
+            VALUE "ProductName", "@SONA_APP_NAME@"
+            VALUE "ProductVersion", "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

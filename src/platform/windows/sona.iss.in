@@ -1,0 +1,91 @@
+; Sona installer. CMake generates sona.iss from this file; the app identity lives in the top-level CMakeLists.txt.
+
+#define AppName "@SONA_APP_NAME@"
+#define AppVersion "@PROJECT_VERSION@"
+#define AppPublisher "@SONA_PUBLISHER@"
+#define AppUserModelID "@SONA_APP_USER_MODEL_ID@"
+#define AppExe "@SONA_EXE_NAME@"
+#define ProgId "Sona.Media"
+#define StageDir "@SONA_STAGE_DIR@"
+#define InstallerAssets "@CMAKE_CURRENT_SOURCE_DIR@"
+
+; Video formats Sona offers to open, shown under Settings > Default apps > Sona.
+#dim Extensions[13] {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv", ".m4v", ".mpg", ".mpeg", ".ts", ".3gp", ".ogv"}
+
+[Setup]
+; Never change AppId: it is how Windows recognizes upgrades and the uninstaller.
+AppId={{803A01F5-6CBB-436F-89E2-7A96F19182F4}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisher={#AppPublisher}
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableWelcomePage=no
+DisableProgramGroupPage=no
+; Asks whether to install for the current user or for all users.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+WizardStyle=modern dynamic
+; The same brand artwork in the light and dark wizard.
+WizardImageFile={#InstallerAssets}\installer-banner.png
+WizardImageFileDynamicDark={#InstallerAssets}\installer-banner.png
+WizardSmallImageFile={#InstallerAssets}\installer-small.png
+WizardSmallImageFileDynamicDark={#InstallerAssets}\installer-small.png
+SetupIconFile={#InstallerAssets}\sona.ico
+UninstallDisplayIcon={app}\{#AppExe}
+UninstallDisplayName={#AppName}
+ChangesAssociations=yes
+OutputDir=@CMAKE_BINARY_DIR@
+OutputBaseFilename={#AppName}-{#AppVersion}-setup
+Compression=lzma2
+SolidCompression=yes
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "associate"; Description: "Open video files with {#AppName}"; GroupDescription: "File associations:"
+
+[Files]
+Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppUserModelID}"
+Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppUserModelID}"; Tasks: desktopicon
+
+[Registry]
+; The file type Sona opens, and Sona's entry in Settings > Default apps.
+Root: HKA; Subkey: "Software\Classes\{#ProgId}"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Media"; Flags: uninsdeletekey; Tasks: associate
+Root: HKA; Subkey: "Software\Classes\{#ProgId}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"; Tasks: associate
+Root: HKA; Subkey: "Software\Classes\{#ProgId}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""; Tasks: associate
+Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"; Flags: uninsdeletekey; Tasks: associate
+Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Play video and audio files."; Tasks: associate
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#AppName}"; ValueData: "Software\{#AppName}\Capabilities"; Flags: uninsdeletevalue; Tasks: associate
+#define i
+#sub AssociateExtension
+Root: HKA; Subkey: "Software\Classes\{#Extensions[i]}\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associate
+Root: HKA; Subkey: "Software\{#AppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: "{#Extensions[i]}"; ValueData: "{#ProgId}"; Tasks: associate
+#endsub
+#for {i = 0; i < DimOf(Extensions); i++} AssociateExtension
+
+[Run]
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Uninstalling removes what Sona created for the user (its settings, written by Qt under
+// <publisher>\<app name>, and its caches) so a reinstall starts fresh, onboarding included.
+// Snapshots in Pictures\Sona are the user's own files and stay.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\{#AppPublisher}\{#AppName}');
+    RegDeleteKeyIfEmpty(HKCU, 'Software\{#AppPublisher}');
+    DelTree(ExpandConstant('{localappdata}\{#AppPublisher}\{#AppName}'), True, True, True);
+    RemoveDir(ExpandConstant('{localappdata}\{#AppPublisher}'));
+  end;
+end;

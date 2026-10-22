@@ -1,0 +1,7 @@
+{
+  "qt-core.qtInstallationRoot": "C:/Qt",
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": true,
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/mingw-debug/compile_commands.json",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+}
