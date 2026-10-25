@@ -7,3 +7,6 @@ CMakeUserPresets.json
 !.vscode/settings.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Figma export, regenerate with tools/figma_export.py
+design/

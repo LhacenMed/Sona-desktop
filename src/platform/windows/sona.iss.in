@@ -76,7 +76,7 @@ Root: HKA; Subkey: "Software\{#AppName}\Capabilities\FileAssociations"; ValueTyp
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-// Uninstalling removes what Sona created for the user (its settings, written by Qt under
+// Uninstalling removes what Sona created for the user (its settings under
 // <publisher>\<app name>, and its caches) so a reinstall starts fresh, onboarding included.
 // Snapshots in Pictures\Sona are the user's own files and stay.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
