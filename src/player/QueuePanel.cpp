@@ -42,10 +42,11 @@ public:
 
     void setCount(std::wstring text) { m_count->setText(std::move(text)); }
 
-    // Figma's actions are bare 24px icons, but repeat and shuffle sit in 30×28 frames (`framed`).
-    IconButton &addAction(const wchar_t *icon, std::wstring tooltip, bool framed, std::function<void()> onClick)
+    // Every action is the same 30×28 button (Figma's repeat and shuffle frames; it draws the rest as
+    // bare 24px icons), so headers are one height and line up across tabs whatever they hold.
+    IconButton &addAction(const wchar_t *icon, std::wstring tooltip, std::function<void()> onClick)
     {
-        auto &action = framed ? m_actions->add<IconButton>(icon, 3.0f, 2.0f) : m_actions->add<IconButton>(icon);
+        auto &action = m_actions->add<IconButton>(icon, 3.0f, 2.0f);
         action.setIconColor(&Palette::fgA3);
         action.setTooltip(std::move(tooltip));
         action.setOnClick(std::move(onClick));
@@ -92,13 +93,13 @@ public:
         , m_queue(queue)
     {
         m_header = &add<Header>();
-        m_header->addAction(L"sort", L"Sort by Name", false, [&queue] { queue.sortByName(); });
-        m_repeat = &m_header->addAction(L"repeat", L"Repeat", true, [&queue] { queue.cycleRepeat(); });
+        m_header->addAction(L"sort", L"Sort by Name", [&queue] { queue.sortByName(); });
+        m_repeat = &m_header->addAction(L"repeat", L"Repeat", [&queue] { queue.cycleRepeat(); });
         m_repeat->setActiveWhen([&queue] { return queue.repeat() != Repeat::Off; });
-        m_header->addAction(L"shuffle", L"Shuffle", true, [&queue] { queue.toggleShuffle(); })
+        m_header->addAction(L"shuffle", L"Shuffle", [&queue] { queue.toggleShuffle(); })
             .setActiveWhen([&queue] { return queue.shuffles(); });
-        m_header->addAction(L"remove", L"Remove", false, [this, &queue] { queue.remove(m_list->list().selected()); });
-        m_header->addAction(L"add", L"Add Files", false, [this, &queue, &settings] {
+        m_header->addAction(L"remove", L"Remove", [this, &queue] { queue.remove(m_list->list().selected()); });
+        m_header->addAction(L"add", L"Add Files", [this, &queue, &settings] {
             chooseFiles(*window(), settings.get(AppSettings::mediaFolder), mediaFileType(),
                         [&queue](std::vector<std::wstring> files) { queue.append(files); });
         });
@@ -150,8 +151,8 @@ public:
         , m_bookmarks(bookmarks)
     {
         m_header = &add<Header>();
-        m_header->addAction(L"remove", L"Remove", false, [this] { removeBookmark(m_list->list().selected()); });
-        m_header->addAction(L"add", commands.label(CommandId::AddBookmark), false,
+        m_header->addAction(L"remove", L"Remove", [this] { removeBookmark(m_list->list().selected()); });
+        m_header->addAction(L"add", commands.label(CommandId::AddBookmark),
                             [&commands] { commands.run(CommandId::AddBookmark); });
 
         m_list = &add<PageList>(L"", 0.0f);
