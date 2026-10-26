@@ -259,6 +259,15 @@ void Canvas::drawText(std::wstring_view text, const Rect &rect, const TextStyle 
     m_context->DrawTextLayout(D2D1::Point2F(rect.x, rect.y), layout.Get(), brush(color));
 }
 
+void Canvas::drawPixels(const Rect &rect, const std::uint32_t *pixels, int width, int height)
+{
+    ComPtr<ID2D1Bitmap> bitmap;
+    check(m_context->CreateBitmap(D2D1::SizeU(width, height), pixels, width * 4,
+                                  D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)),
+                                  &bitmap));
+    m_context->DrawBitmap(bitmap.Get(), toD2D(rect), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+}
+
 void Canvas::drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps)
 {
     std::wstring key = std::format(L"{}|{}x{}", assetPath, rect.width, rect.height);

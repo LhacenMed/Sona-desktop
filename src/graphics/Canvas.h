@@ -83,6 +83,8 @@ public:
     // under its fill, and is opaque where nothing is behind it.
     void fillSurface(const Rect &rect, const Surface &surface, const Backdrop *behind = nullptr);
     void drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color);
+    // Draws a picture from memory (32-bit BGR pixels, top row first) stretched to `rect`.
+    void drawPixels(const Rect &rect, const std::uint32_t *pixels, int width, int height);
     // Draws an SVG from assets/ stretched to `rect`.
     void drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps = {});
 

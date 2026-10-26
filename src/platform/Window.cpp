@@ -685,6 +685,8 @@ void Window::pointerMoved(Point point)
     setHovered(m_pressed && target != m_pressed ? nullptr : target);
     if (m_pressed)
         m_pressed->mouseDragged(m_pressed->mapFromWindow(point));
+    else if (target && moved)
+        target->mouseMoved(target->mapFromWindow(point));
     if (moved)
         pointerChanged();
 }

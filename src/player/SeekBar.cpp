@@ -5,8 +5,11 @@
 #include "core/TimeText.h"
 #include "data/Bookmarks.h"
 #include "graphics/Canvas.h"
+#include "platform/Window.h"
 #include "playback/Player.h"
+#include "player/SeekPreview.h"
 #include "style/Theme.h"
+#include "widgets/Overlay.h"
 
 namespace {
 
@@ -15,6 +18,8 @@ constexpr float handleWidth = 8;
 // A bookmark's mark: a line as tall as the fill, in a wider strip that takes the pointer.
 constexpr float markWidth = 2;
 constexpr float markHitWidth = 10;
+// Between the preview and the seek bar, and the window's edges.
+constexpr float previewGap = 8;
 
 } // namespace
 
@@ -46,7 +51,18 @@ public:
             m_player.seek(m_time);
     }
 
+    // Over a mark, the seek bar's preview carries on.
+    void hoverChanged() override
+    {
+        if (!isHovered())
+            bar().hidePreview();
+    }
+
+    void mouseMoved(Point point) override { bar().showPreview(frame().x + point.x); }
+
 private:
+    SeekBar &bar() const { return *static_cast<SeekBar *>(parent()); }
+
     Player &m_player;
     double m_time;
 };
@@ -124,19 +140,64 @@ void SeekBar::paintTree(Canvas &canvas)
     canvas.restore();
 }
 
+void SeekBar::hoverChanged()
+{
+    if (isHovered())
+        m_player.preparePreview();
+    else if (!isPressed())
+        hidePreview();
+}
+
+void SeekBar::mouseMoved(Point point)
+{
+    showPreview(point.x);
+}
+
 void SeekBar::mousePressed(Point point)
 {
-    seekTo(point.x);
+    m_pressedProgress = progressAt(point.x);
+    invalidate();
 }
 
 void SeekBar::mouseDragged(Point point)
 {
-    seekTo(point.x);
+    m_pressedProgress = progressAt(point.x);
+    invalidate();
+    showPreview(point.x);
 }
 
-void SeekBar::seekTo(float x)
+void SeekBar::mouseReleased(Point, bool)
 {
-    const float travel = frame().width - 2 * inset - handleWidth;
-    m_pressedProgress = std::clamp((x - inset - handleWidth / 2) / travel, 0.0f, 1.0f);
     m_player.seek(m_pressedProgress * m_player.duration());
+    if (!isHovered())
+        hidePreview();
+}
+
+void SeekBar::showPreview(float x)
+{
+    Overlay &overlay = window()->overlay();
+    if (!m_preview)
+        m_preview = &overlay.add<SeekPreview>(m_player);
+    const double seconds = progressAt(x) * m_player.duration();
+    m_preview->show(seconds);
+    m_player.previewAt(seconds);
+    // Centred over the pointer, above the bar, and inside the window.
+    const Size size = m_preview->preferredSize();
+    const Rect bar = mapToWindow(bounds());
+    const Point origin = overlay.mapFromWindow({bar.x, bar.y});
+    const float left = std::clamp(origin.x + x - size.width / 2, previewGap,
+                                  std::max(previewGap, overlay.frame().width - previewGap - size.width));
+    m_preview->setFrame({left, origin.y - previewGap - size.height, size.width, size.height});
+    m_preview->setVisible(true);
+}
+
+void SeekBar::hidePreview()
+{
+    if (m_preview)
+        m_preview->setVisible(false);
+}
+
+float SeekBar::progressAt(float x) const
+{
+    return std::clamp((x - inset - handleWidth / 2) / (frame().width - 2 * inset - handleWidth), 0.0f, 1.0f);
 }

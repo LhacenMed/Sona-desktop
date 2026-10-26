@@ -37,6 +37,7 @@ add_executable(sona WIN32
     player/PlayerView.cpp
     player/QueuePanel.cpp
     player/SeekBar.cpp
+    player/SeekPreview.cpp
     player/TimeLabel.cpp
     player/TitleBar.cpp
     player/VideoHost.cpp

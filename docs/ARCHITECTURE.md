@@ -65,6 +65,10 @@ between features:
   arrives; presenting waits for the display. `Timer` is for delays (tooltips, caret blink).
 - **Media opens through the `Queue`.** Opening, dropping and the command line all go to `Queue::open`
   or `append`; only the queue calls `Player::open`.
+- **Playback starts first.** Seeks collapse into the latest target; duration reads wait until the
+  opening media plays. The seek bar's preview comes from a second, silent player decoding into
+  memory at keyframes (`Player::previewAt`), drawn in the overlay (`SeekPreview`); the video seeks
+  once, exactly, where the bar is let go.
 - **libVLC runs off the UI thread.** `Player` queues every command on its engine thread and marshals every
   libVLC event back to the UI thread. Never call libVLC from a view.
 - **Sizes are DIPs from Figma.** Views use the Figma numbers; `Window` scales to the monitor's DPI.

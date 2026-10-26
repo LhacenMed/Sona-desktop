@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -11,10 +12,6 @@
 #include "platform/KnownFolders.h"
 #include "playback/LibVlc.h"
 #include "playback/MediaFiles.h"
-#include <cstdio>
-#include <chrono>
-void TRACE(const char *what) { static FILE *f = std::fopen("C:\Users\lhacenmed\sona-trace.txt", "a"); static auto t0 = std::chrono::steady_clock::now(); std::fprintf(f, "%6lld ms  %s
-", (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count(), what); std::fflush(f); }
 
 namespace {
 
@@ -26,6 +23,10 @@ constexpr libvlc_event_e watchedEvents[] = {
     libvlc_MediaPlayerTimeChanged, libvlc_MediaPlayerLengthChanged, libvlc_MediaPlayerVout,
     libvlc_MediaPlayerAudioVolume,
 };
+
+// The largest preview picture, in pixels: twice Figma's 252×142 thumbnail, for high-DPI screens.
+constexpr unsigned previewMaxWidth = 504;
+constexpr unsigned previewMaxHeight = 284;
 
 // Selects the track after the current one in a libVLC track list (which starts with "Disable"),
 // wrapping around.
@@ -69,7 +70,6 @@ Player::Player()
     }();
     m_messageWindow = CreateWindowExW(0, MAKEINTATOM(messageClass), nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                       GetModuleHandleW(nullptr), nullptr);
-    TRACE("player created");
     m_engine = std::thread([this] { runEngine(); });
     post([this] { startEngine(); });
 }
@@ -83,6 +83,10 @@ Player::~Player()
                 libvlc_event_detach(events, event, &Player::onEvent, this);
             libvlc_media_player_stop(player);
             libvlc_media_player_release(player);
+        }
+        if (libvlc_media_player_t *preview = m_previewPlayer.exchange(nullptr)) {
+            libvlc_media_player_stop(preview);
+            libvlc_media_player_release(preview);
         }
         while (!m_durationRequests.empty())
             releaseDurationRequest(m_durationRequests.back().get());
@@ -133,7 +137,12 @@ void Player::startEngine()
     for (const libvlc_event_e event : watchedEvents)
         libvlc_event_attach(events, event, &Player::onEvent, this);
     m_player = player;
-    TRACE("libvlc ready");
+
+    if (libvlc_media_player_t *preview = libvlc_media_player_new(m_vlc)) {
+        libvlc_video_set_format_callbacks(preview, &Player::previewFormat, nullptr);
+        libvlc_video_set_callbacks(preview, &Player::previewLock, nullptr, &Player::previewDisplay, this);
+        m_previewPlayer = preview;
+    }
 }
 
 void Player::post(std::function<void()> command)
@@ -171,14 +180,64 @@ void Player::onEvent(const libvlc_event_t *event, void *opaque)
     self->runOnUiThread([self, type, videoOutputCount] { self->handleEvent(type, videoOutputCount); });
 }
 
+unsigned Player::previewFormat(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines)
+{
+    // Runs on a libVLC thread, as do previewLock and previewDisplay.
+    auto *self = static_cast<Player *>(*opaque);
+    // A video stored on its side (a phone's) comes rotated upright, its sides swapped.
+    if (libvlc_media_t *media = libvlc_media_player_get_media(self->m_previewPlayer)) {
+        libvlc_media_track_t **tracks = nullptr;
+        const unsigned count = libvlc_media_tracks_get(media, &tracks);
+        for (unsigned i = 0; i < count; ++i) {
+            if (tracks[i]->i_type == libvlc_track_video && tracks[i]->video->i_orientation >= libvlc_video_orient_left_top)
+                std::swap(*width, *height);
+        }
+        libvlc_media_tracks_release(tracks, count);
+        libvlc_media_release(media);
+    }
+    const double scale = std::min({1.0, static_cast<double>(previewMaxWidth) / *width, static_cast<double>(previewMaxHeight) / *height});
+    *width = std::max(1u, static_cast<unsigned>(*width * scale));
+    *height = std::max(1u, static_cast<unsigned>(*height * scale));
+    std::memcpy(chroma, "RV32", 4);
+    *pitches = *width * 4;
+    *lines = *height;
+    self->m_previewDecoding = {static_cast<int>(*width), static_cast<int>(*height), std::vector<std::uint32_t>(*width * *height)};
+    return 1;
+}
+
+void *Player::previewLock(void *opaque, void **planes)
+{
+    *planes = static_cast<Player *>(opaque)->m_previewDecoding.pixels.data();
+    return nullptr;
+}
+
+void Player::previewDisplay(void *opaque, void *)
+{
+    auto *self = static_cast<Player *>(opaque);
+    // One picture per moment asked for: it rests until the next.
+    self->post([self] {
+        if (libvlc_media_player_t *preview = self->m_previewPlayer)
+            libvlc_media_player_set_pause(preview, 1);
+    });
+    self->runOnUiThread([self, frame = self->m_previewDecoding] {
+        self->m_preview = std::move(frame);
+        self->previewChanged.emit();
+    });
+}
+
 void Player::handleEvent(int type, int videoOutputCount)
 {
     libvlc_media_player_t *player = m_player;
     if (!player)
         return;
+    // Duration reads waited for the media to start.
+    if (m_opening && (type == libvlc_MediaPlayerPlaying || type == libvlc_MediaPlayerEncounteredError)) {
+        m_opening = false;
+        for (auto &[location, done] : std::exchange(m_waitingDurations, {}))
+            readDuration(location, std::move(done));
+    }
     switch (type) {
     case libvlc_MediaPlayerPlaying:
-        TRACE("playing");
         // libVLC opens the audio output at its own volume; the app's applies from now on.
         applyAudio();
         if (libvlc_media_t *media = libvlc_media_player_get_media(player)) {
@@ -195,7 +254,6 @@ void Player::handleEvent(int type, int videoOutputCount)
             applyAudio();
         break;
     case libvlc_MediaPlayerVout:
-        TRACE("vout");
         m_hasVideo = videoOutputCount > 0;
         break;
     }
@@ -257,7 +315,9 @@ void Player::setVideoWindow(HWND window)
 
 void Player::open(const std::wstring &location)
 {
-    TRACE("open called");
+    m_location = location;
+    m_opening = true;
+    closePreview();
     m_title = displayName(location);
     m_folderName = isUrl(location) ? std::wstring() : std::filesystem::path(location).parent_path().filename().wstring();
     m_chapters.clear();
@@ -273,7 +333,6 @@ void Player::open(const std::wstring &location)
         libvlc_media_player_set_media(player, media);
         libvlc_media_release(media);
         libvlc_media_player_play(player);
-        TRACE("play command run");
     });
 }
 
@@ -306,9 +365,67 @@ void Player::seek(double seconds)
     // Shown at once; libVLC confirms with its next time change.
     m_position = std::clamp(seconds, 0.0, m_duration);
     changed.emit();
-    post([this, milliseconds = std::llround(m_position * 1000)] {
+    m_seekTarget = std::llround(m_position * 1000);
+    if (m_seekQueued.exchange(true))
+        return;
+    post([this] {
+        m_seekQueued = false;
         if (libvlc_media_player_t *player = m_player)
-            libvlc_media_player_set_time(player, milliseconds);
+            libvlc_media_player_set_time(player, m_seekTarget);
+    });
+}
+
+void Player::preparePreview()
+{
+    if (!m_location.empty())
+        post([this, location = m_location, seconds = m_position] { openPreviewMedia(location, seconds); });
+}
+
+void Player::previewAt(double seconds)
+{
+    if (m_duration <= 0)
+        return;
+    m_previewTarget = std::llround(std::clamp(seconds, 0.0, m_duration) * 1000);
+    if (m_previewQueued.exchange(true))
+        return;
+    post([this, location = m_location] {
+        m_previewQueued = false;
+        openPreviewMedia(location, m_previewTarget / 1000.0);
+        if (libvlc_media_player_t *preview = m_previewPlayer) {
+            libvlc_media_player_set_time(preview, m_previewTarget);
+            // A paused player decoding into memory shows nothing new; it plays to its next picture.
+            libvlc_media_player_set_pause(preview, 0);
+        }
+    });
+}
+
+void Player::openPreviewMedia(const std::wstring &location, double seconds)
+{
+    libvlc_media_player_t *preview = m_previewPlayer;
+    if (!preview || location == m_previewMedia)
+        return;
+    libvlc_media_t *media = newMedia(location);
+    if (!media)
+        return;
+    // Seeks to the nearest keyframe, which shows at once; silent, and still at its first picture.
+    libvlc_media_add_option(media, ":input-fast-seek");
+    libvlc_media_add_option(media, ":no-audio");
+    libvlc_media_add_option(media, ":start-paused");
+    libvlc_media_add_option(media, (":start-time=" + std::to_string(seconds)).c_str());
+    libvlc_media_player_set_media(preview, media);
+    libvlc_media_release(media);
+    libvlc_media_player_play(preview);
+    m_previewMedia = location;
+}
+
+void Player::closePreview()
+{
+    // A picture of the previous media is no preview of this one.
+    m_preview = {};
+    post([this] {
+        if (libvlc_media_player_t *preview = m_previewPlayer)
+            libvlc_media_player_stop(preview);
+        m_previewMedia.clear();
     });
 }
 
@@ -371,6 +488,10 @@ void Player::stop(std::function<void()> done)
 
 void Player::readDuration(const std::wstring &location, std::function<void(double seconds)> done)
 {
+    if (m_opening) {
+        m_waitingDurations.emplace_back(location, std::move(done));
+        return;
+    }
     post([this, location, done = std::move(done)]() mutable {
         if (!m_vlc)
             return;
@@ -393,7 +514,7 @@ void Player::onParsed(const libvlc_event_t *event, void *opaque)
     Player *self = request->player;
     if (event->u.media_parsed_changed.new_status == libvlc_media_parsed_status_done) {
         if (const libvlc_time_t duration = libvlc_media_get_duration(request->media); duration > 0)
-            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { TRACE("duration"); done(seconds); });
+            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { done(seconds); });
     }
     // A media can't be released from its own event.
     self->post([self, request] { self->releaseDurationRequest(request); });

@@ -64,8 +64,11 @@ private:
     // the ends if `wraps`; -1 when there's none.
     int step(int direction, bool wraps) const;
     int indexOf(int id) const;
-    // Adds media locations to the end, reading their durations.
+    // Adds media locations to the end.
     void add(const std::vector<std::wstring> &locations);
+    // Reads the durations of the items from `first` on, after what plays has been opened, which
+    // the reads wait for (Player::readDuration).
+    void readDurations(int first);
     // A new play order for shuffling, which starts with the playing item.
     void shuffle();
     void playedToEnd();

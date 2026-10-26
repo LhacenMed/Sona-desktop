@@ -37,6 +37,8 @@ inline constexpr Surface menu{10, &Palette::bgPopup, {0, 8}, 15, 0.46f, frostedB
 inline constexpr Surface list{6, &Palette::bgPopup, {0, 4}, 13.8f, 0.35f, frostedBlur};
 // Callouts: tooltips, the volume value (2245:9805) and on-screen messages.
 inline constexpr Surface callout{6, &Palette::bgB1Transparent, {0, 8}, 15, 0.46f, 0};
+// The seek bar's preview (2151:9673), in the window, over the video.
+inline constexpr Surface thumbnail{14, &Palette::bgPopup, {}, 0, 0, 0};
 // Control-bar panels (463:831), which float without a shadow.
 inline constexpr Surface panel{10, &Palette::bgPanel, {}, 0, 0, frostedBlur};
 

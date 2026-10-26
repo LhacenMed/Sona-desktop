@@ -79,6 +79,8 @@ public:
     virtual void mousePressed(Point) {}
     virtual void mouseDragged(Point) {}
     virtual void mouseReleased(Point, bool /*inside*/) {}
+    // The pointer moved over the view while it's hovered and nothing is pressed.
+    virtual void mouseMoved(Point) {}
     // A wheel or touchpad scroll over the view, in notches; positive brings content above into
     // view. Returns whether the view scrolled; otherwise its parent is offered the scroll.
     virtual bool wheelScrolled(float /*notches*/) { return false; }

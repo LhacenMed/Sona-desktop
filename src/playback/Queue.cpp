@@ -54,6 +54,7 @@ void Queue::open(const std::vector<std::wstring> &opened)
     m_current = -1;
     add(locations);
     play(m_shuffles ? indexOf(m_shuffleOrder.front()) : 0);
+    readDurations(0);
 }
 
 void Queue::append(const std::vector<std::wstring> &opened)
@@ -67,6 +68,7 @@ void Queue::append(const std::vector<std::wstring> &opened)
         play(first);
     else
         changed.emit();
+    readDurations(first);
 }
 
 void Queue::add(const std::vector<std::wstring> &locations)
@@ -81,7 +83,13 @@ void Queue::add(const std::vector<std::wstring> &locations)
             std::uniform_int_distribution<std::ptrdiff_t> position(0, m_shuffleOrder.end() - unplayed);
             m_shuffleOrder.insert(unplayed + position(m_random), id);
         }
-        m_player.readDuration(location, [this, id](double seconds) {
+    }
+}
+
+void Queue::readDurations(int first)
+{
+    for (size_t i = first; i < m_items.size(); ++i) {
+        m_player.readDuration(m_items[i].location, [this, id = m_items[i].id](double seconds) {
             if (const int index = indexOf(id); index >= 0) {
                 m_items[index].duration = seconds;
                 changed.emit();
