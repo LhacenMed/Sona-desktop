@@ -557,14 +557,27 @@ float Window::contentTop() const
     return isMaximized() ? frameThickness() / scale() : 0;
 }
 
+bool Window::isUnderPopup() const
+{
+    // A menu stays live under its submenu.
+    return m_popup && m_frame != WindowFrame::Popup;
+}
+
 View *Window::viewAt(Point point) const
 {
     if (!m_root)
+        return nullptr;
+    // While something floats over the content, the rest takes no part, as behind native menus and
+    // flyouts: it doesn't hover, show its pointer or tooltip, or scroll, and a click there only
+    // closes what floats.
+    if (isUnderPopup())
         return nullptr;
     const Rect &content = m_root->frame();
     const Point local{point.x - content.x, point.y - content.y};
     if (View *hit = m_overlay->hitTest(local))
         return hit;
+    if (m_overlay->hasPopovers())
+        return nullptr;
     return m_root->hitTest(local);
 }
 
@@ -743,12 +756,18 @@ void Window::wheelScrolled(Point point, float notches)
     if (!m_root)
         return;
     // Any view can scroll, not only those that take clicks: the deepest one under the pointer is
-    // offered the scroll first, then its parents.
+    // offered the scroll first, then its parents. Content under a popup or popovers doesn't scroll
+    // (viewAt).
+    if (isUnderPopup())
+        return;
     const Rect &content = m_root->frame();
     const Point local{point.x - content.x, point.y - content.y};
     View *target = deepestViewAt(*m_overlay, local);
-    if (target == m_overlay.get())
+    if (target == m_overlay.get()) {
+        if (m_overlay->hasPopovers())
+            return;
         target = deepestViewAt(*m_root, local);
+    }
     for (View *view = target; view; view = view->parent()) {
         if (view->wheelScrolled(notches)) {
             // Different content is under the pointer now.

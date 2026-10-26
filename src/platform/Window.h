@@ -33,7 +33,8 @@ enum class WindowFrame { Resizable, Fixed, Popup };
 //
 // Input goes to views: the mouse to the view under it, keys to the focused view and then to the
 // window's shortcuts (keyPressed). An open popup takes the keys first. An open popup or popover
-// closes on Escape or on a click anywhere else, and that click does nothing more.
+// closes on Escape or on a click anywhere else, and that click does nothing more; until then, the
+// content it floats over takes no part in the mouse (no hover, pointer shape, tooltip or scroll).
 class Window
 {
 public:
@@ -140,6 +141,8 @@ private:
     // Shows the pointer the view under it asks for, or none while it's hidden.
     void applyCursor();
     void pointerPressed(Point point);
+    // Whether a popup is open over this window's content, which then takes no part in the mouse.
+    bool isUnderPopup() const;
     void pointerReleased(Point point);
     void wheelScrolled(Point point, float notches);
     // The deepest visible view under `point` (in `view`'s coordinates), whether or not it takes the mouse.

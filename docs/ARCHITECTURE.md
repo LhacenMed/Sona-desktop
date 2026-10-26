@@ -44,6 +44,8 @@ between features:
   first), keys to the focused view and then to the window's commands, wheel scrolls up the view
   tree until one scrolls. An open popup (`PopupWindow`, which never takes activation) gets every
   key; a popup or popover closes on Escape or a click elsewhere, and that click does nothing else.
+  Until then the content under it takes no part in the mouse (`Window::viewAt`): no hover, pointer
+  shape, tooltip or scroll, as behind native menus and flyouts; a menu stays live under its submenu.
   Views are removed with `View::remove`, so the window never keeps a pointer to a dead view.
   Hover feedback eases in and out for every view (`View::hoverAmount`); widgets tint by it rather
   than by `isHovered`.
