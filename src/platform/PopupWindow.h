@@ -35,7 +35,8 @@ enum class PopupKeys { Kept, Passed };
 // (the window it opened over, BackdropCapture), and opens with VS Code's menu motion: all of it fades
 // in while growing from 97% out of the corner nearest what it opened from. It never takes
 // activation: the owner keeps the keyboard and passes it every key while the popup is open. It closes
-// on Escape, on a click anywhere else, and when the owner moves or loses activation. A popup can own
+// on Escape, on a click anywhere else (its shadow included), and when the owner moves or loses
+// activation. A popup can own
 // a popup (a submenu), which takes the keys in turn.
 class PopupWindow : public Window
 {

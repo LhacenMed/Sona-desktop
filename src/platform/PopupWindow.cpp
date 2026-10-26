@@ -38,6 +38,15 @@ public:
         m_content.setFrame({margin, margin, frame().width - 2 * margin, frame().height - 2 * margin});
     }
 
+    // Only the surface takes the mouse; the shadow around it is the window's (Window::hitTest).
+    View *hitTest(Point point) override
+    {
+        if (!m_content.frame().contains(point))
+            return nullptr;
+        View *hit = View::hitTest(point);
+        return hit ? hit : this;
+    }
+
     void paintTree(Canvas &canvas) override
     {
         const float opened = m_opening.value(*this);

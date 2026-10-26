@@ -531,6 +531,9 @@ LRESULT Window::hitTest(LPARAM screenPoint)
         return HTTOP;
 
     const View *view = viewAt(toDips(client));
+    // Around a popup's surface, over its shadow, the mouse is for the window behind it.
+    if (!view && m_frame == WindowFrame::Popup)
+        return HTTRANSPARENT;
     switch (view ? view->hitRole() : HitRole::Client) {
     case HitRole::Caption:
         return HTCAPTION;
