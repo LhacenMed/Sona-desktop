@@ -15,12 +15,12 @@ between features:
 | `core/` | Platform-free primitives: `Geometry` (DIPs), `Color`, `Signal`/`Subscription`, UTF-8 conversion. |
 | `platform/` | Win32: `Window` (custom frame with native behavior), embedded `Resources`, `FileDialogs`, `KnownFolders`, `SystemTheme`, installer files under `windows/`. |
 | `graphics/` | `GraphicsDevice` (D3D11, D2D, DComp, DWrite with the bundled font), `WindowSurface` (per-window swap chain), `Canvas` (the drawing API). |
-| `style/` | The design system: `Theme` (Figma tokens resolved for theme and accent), `Typography`. |
+| `style/` | The design system: `Theme` (Figma tokens resolved for theme and accent), `Surface` (the raised surfaces: list, menu, callout, panel), `Typography`. |
 | `settings/` | `SettingsStore` (registry) and `AppSettings` (every preference, declared once). |
 | `commands/` | `CommandRegistry`: every user action (`CommandId`) with its shortcuts and what it runs. |
-| `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (popovers, tooltips), `Popover`, `Label`, `Icon`, `IconButton`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `DialogWindow`, `Animation`. |
+| `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (popovers, tooltips), `Popover`, `Menu`, `Label`, `Icon`, `IconButton`, `CaptionButton`, `WindowButtons`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `DialogWindow`, `Animation`. |
 | `playback/` | `Player`: the only code that includes libVLC. |
-| `player/`, `maininterface/`, `onboarding/` | Feature UI: the control bar and video, the main window and title bar (and `MainCommands`, the player's commands), first-run onboarding. |
+| `player/`, `maininterface/`, `onboarding/` | Feature UI: the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
 | `gallery/` | Debug builds only (`sona.exe --gallery`): every widget on one page, for checking against Figma. |
 
 ## Rules that keep it consistent
@@ -30,14 +30,16 @@ between features:
   live in the `CommandRegistry` and drive both the key handling and the onboarding guide.
 - **Views read shared state when they paint.** They subscribe to a `Signal` and call `invalidate()`; the
   window redraws on the next `WM_PAINT`. Nothing copies state into a view except text labels.
-- **The title bar is the native caption.** `Window::setNativeCaption` extends the DWM frame under the
-  title bar: Windows paints its background in the caption colour and draws and runs the minimize,
-  maximize and close buttons (the system's look, Snap Layouts, animations), and the bar's views leave
-  their background transparent. The bar is as tall as those buttons (`Window::captionHeight`, which
-  follows the window state and DPI), its own buttons are `CaptionButton`s (system icon font, native
-  hover fills) and its text is in the system font. Views declare a `HitRole` (`Caption`, `SystemMenu`)
-  for the rest of the bar. The buttons' size is measured on a cloaked stand-in window, so the first
-  frame is laid out before a plain first showing, which is what plays Windows' open animation.
+- **The title bar is views that act as Windows' caption.** So it can slide over the video like the
+  control bar, minimize, maximize and close are `CaptionButton`s (`WindowButtons`: system icon font,
+  native hover fills, the red close) at the size Windows gives its own (`Window::captionButtonSize`,
+  measured on cloaked stand-in windows, restored and maximized, so the first frame is laid out before a
+  plain first showing, which plays Windows' open animation). Views declare a `HitRole`: `Caption`,
+  `SystemMenu`, and `Minimize`/`Maximize`/`Close`, which the window answers as Windows' own buttons, so
+  Snap Layouts open over maximize; their non-client mouse messages are handled as the views' clicks.
+- **The window knows where the pointer is over all of it** (`Window::pointerPosition`), the title bar
+  and frame included, which Windows reports as non-client: leaving the content for the title bar isn't
+  leaving the window.
 - **Input reaches views through the window.** The mouse goes to the view under it (the `Overlay`
   first), keys to the focused view and then to the window's commands, wheel scrolls up the view
   tree until one scrolls. An open popup (`PopupWindow`, which never takes activation) gets every
@@ -62,6 +64,10 @@ between features:
   `design/components/Icon [42-356]/`.
 - **A command**: an id in `commands/Command.h` and its definition (shortcuts, `run`, optional
   `enabled`) in `maininterface/MainCommands.cpp`; leave `run` empty until the feature exists.
+- **A menu item**: a line in `maininterface/MainMenus.cpp`; its name, icon, shortcut and state come
+  from its command.
+- **A bar item**: a `BarItem` and its case in `player/BarItems.cpp`; place it in `defaultBarLayout`
+  (`player/BarLayout.h`).
 - **A widget**: a `View` subclass in `widgets/` with the Figma numbers, and a sample on the gallery
   page (`gallery/GalleryWindow.cpp`).
 - **A playback capability**: a method on `Player` that `post`s the libVLC call; state that the UI shows

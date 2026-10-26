@@ -24,6 +24,7 @@ Palette makePalette(bool dark, const AccentColors &accent)
         .bgAccentDark = Color::mix(bgB1, accentMain, 0.06f),
         .bgA2 = Color::hex(dark ? 0x1f1f1f : 0xbdbdbd),
         .bgA3 = Color::hex(dark ? 0x1b1b1b : 0xd5d5d5),
+        .bgA3Transparent = dark ? Color::hex(0x191919, 0.95f) : Color::hex(0xd5d5d5, 0.75f),
         .bgA4 = Color::hex(dark ? 0x191919 : 0xacacac),
         .bgA5 = Color::hex(dark ? 0x151515 : 0x888888),
         .bgB1 = bgB1,

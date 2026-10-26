@@ -1,5 +1,32 @@
 #include "platform/KeyChord.h"
 
+namespace {
+
+// The key without its modifiers.
+std::wstring keyName(UINT key)
+{
+    switch (key) {
+    case VK_SPACE:
+        return L"Space";
+    case VK_ESCAPE:
+        return L"Esc";
+    case VK_LEFT:
+        return L"←";
+    case VK_RIGHT:
+        return L"→";
+    case VK_UP:
+        return L"↑";
+    case VK_DOWN:
+        return L"↓";
+    }
+    if (key >= VK_F1 && key <= VK_F24)
+        return L"F" + std::to_wstring(key - VK_F1 + 1);
+    // Letters, digits and punctuation, as the keyboard layout prints them.
+    return std::wstring(1, static_cast<wchar_t>(MapVirtualKeyW(key, MAPVK_VK_TO_CHAR) & 0x7fff));
+}
+
+} // namespace
+
 std::vector<std::wstring> keyNames(KeyChord chord)
 {
     std::vector<std::wstring> names;
@@ -9,34 +36,18 @@ std::vector<std::wstring> keyNames(KeyChord chord)
         names.emplace_back(L"SHIFT");
     if (chord.alt)
         names.emplace_back(L"ALT");
-
-    switch (chord.key) {
-    case VK_SPACE:
-        names.emplace_back(L"Space");
-        break;
-    case VK_ESCAPE:
-        names.emplace_back(L"Esc");
-        break;
-    case VK_LEFT:
-        names.emplace_back(L"←");
-        break;
-    case VK_RIGHT:
-        names.emplace_back(L"→");
-        break;
-    case VK_UP:
-        names.emplace_back(L"↑");
-        break;
-    case VK_DOWN:
-        names.emplace_back(L"↓");
-        break;
-    default:
-        if (chord.key >= VK_F1 && chord.key <= VK_F24) {
-            names.push_back(L"F" + std::to_wstring(chord.key - VK_F1 + 1));
-        } else {
-            // Letters, digits and punctuation, as the keyboard layout prints them.
-            const wchar_t character = static_cast<wchar_t>(MapVirtualKeyW(chord.key, MAPVK_VK_TO_CHAR) & 0x7fff);
-            names.emplace_back(1, character);
-        }
-    }
+    names.push_back(keyName(chord.key));
     return names;
+}
+
+std::wstring shortcutText(KeyChord chord)
+{
+    std::wstring text;
+    if (chord.control)
+        text += L"Ctrl + ";
+    if (chord.shift)
+        text += L"Shift + ";
+    if (chord.alt)
+        text += L"Alt + ";
+    return text + keyName(chord.key);
 }

@@ -19,6 +19,14 @@ void IconButton::setIconName(std::wstring name)
     invalidate();
 }
 
+void IconButton::setEnabled(bool enabled)
+{
+    if (enabled == m_enabled)
+        return;
+    m_enabled = enabled;
+    invalidate();
+}
+
 Size IconButton::preferredSize() const
 {
     return {iconSize + 2 * m_horizontalPadding, iconSize + 2 * m_verticalPadding};
@@ -28,7 +36,8 @@ void IconButton::paint(Canvas &canvas)
 {
     const Palette &palette = canvas.palette();
     canvas.fillRoundedRect(bounds(), 4, isPressed() ? palette.pressedOverlay : palette.hoverOverlay.faded(hoverAmount()));
-    drawIcon(canvas, m_iconName, {(frame().width - iconSize) / 2, (frame().height - iconSize) / 2}, palette.fgA2);
+    drawIcon(canvas, m_iconName, {(frame().width - iconSize) / 2, (frame().height - iconSize) / 2},
+             m_enabled ? palette.fgA2 : palette.fgA4);
 }
 
 void IconButton::mouseReleased(Point, bool inside)

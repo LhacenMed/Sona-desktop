@@ -13,10 +13,12 @@ public:
     explicit IconButton(std::wstring iconName, float horizontalPadding = 0, float verticalPadding = 0);
 
     void setIconName(std::wstring name);
+    // Disabled, it's dimmed and ignores the mouse.
+    void setEnabled(bool enabled);
     void setOnClick(std::function<void()> onClick) { m_onClick = std::move(onClick); }
 
     Size preferredSize() const override;
-    bool takesMouse() const override { return true; }
+    bool takesMouse() const override { return m_enabled; }
     Cursor cursor() const override { return Cursor::Hand; }
     void paint(Canvas &canvas) override;
     void mouseReleased(Point point, bool inside) override;
@@ -28,6 +30,7 @@ private:
     std::wstring m_iconName;
     float m_horizontalPadding;
     float m_verticalPadding;
+    bool m_enabled = true;
     std::function<void()> m_onClick;
 };
 

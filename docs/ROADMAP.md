@@ -102,7 +102,7 @@ Setup.
 
 | Area | What exists | Where |
 | --- | --- | --- |
-| Window | Custom title bar joined with Windows' own caption buttons (Snap Layouts, animations), stand-in measurement of the button size, maximized/fullscreen handling, DPI, open animation, no white flash | `platform/Window`, `maininterface/TitleBar`, `CaptionButton` |
+| Window | Title bar drawn as views with minimize/maximize/close at Windows' size acting as Windows' own (Snap Layouts, animations), stand-in measurement of the button size, maximized/fullscreen handling, DPI, open animation, no white flash | `platform/Window`, `widgets/WindowButtons`, `CaptionButton` |
 | Rendering | One shared D3D11/D2D/DComp device, per-window swap chains drawn above the libVLC child window, SVG icons with colour swaps, Inter from resources | `graphics/` |
 | Toolkit | `View` (tree, hit testing, hover/press, focus, keys, wheel, tooltips), `Row`/`Column` (padding, alignment), `ScrollView`, overlay layer with popovers and tooltips, popup windows, `Animation` and `Timer`, `Label`, `Icon` (mono and two-tone), `IconButton`/`IconWrapper`, `Button` (primary, secondary, neutral), `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField` (selection, clipboard, undo, IME), `DialogWindow` (modal, owned) | `widgets/`, `platform/` |
 | Commands | Registry of every action and its shortcuts; keyboard handling and the onboarding guide read it (keys decided in D3) | `commands/`, `maininterface/MainCommands` |
@@ -110,13 +110,14 @@ Setup.
 | Design tokens | Dark/Light palettes, 9 accent colours, theme mode (Light/Dark/System) | `style/Theme` |
 | Settings | Registry store; 4 settings (onboardingCompleted, theme, accentIndex, mediaFolder) | `settings/` |
 | Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close | `playback/Player` |
-| Player UI | Video with rounded frame, control bar (previous, play, next, times, thick seek bar, volume cone, audio/subtitles/settings/queue buttons, which do nothing yet), keyboard shortcuts, drag and drop, "Open with" | `player/`, `maininterface/` |
+| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on by default when opened with media), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop, "Open with" | `player/`, `maininterface/` |
 | Onboarding | Welcome + media folder, theme + accent with live preview, shortcuts guide | `onboarding/` |
 | Packaging | Release build, libVLC deploy with plugin cache, per-user installer | `cmake/`, `platform/windows/` |
 
 ### Not built yet
 
 Everything in [section 5](#5-ui-specification) beyond the above:
+
 - auto-hiding bars, menus, the right-click menu, all panels, the queue, the library, all dialogs and
   the settings window
 - music view, miniplayer, customize player, profiles, light-theme review
@@ -127,9 +128,13 @@ value field (a `Slider` next to a `TextField`, composed where P5 needs it).
 
 ### Known deviations from Figma (intentional)
 
-- The window's minimize, maximize and close are Windows' own buttons. Their size comes from Windows, so
-  the title bar is 37 px restored and 28 px maximized at 125% scale, not Figma's 40. The bar's other
+- The window's minimize, maximize and close look and act as Windows' own, at Windows' size, so the
+  title bar is 37 px restored and 28 px maximized at 125% scale, not Figma's 40. The bar's other
   buttons use the system icon font to match.
+- The bars sit over the video rather than beside it, so showing and hiding them never resizes the
+  video.
+- The right-click menu's submenus aren't drawn in Figma; each holds the existing commands of its kind.
+- The right-click menu shows Record as Shift+R (decision D3), not R.
 - "VLC" becomes "Sona" (title, menu items, onboarding text).
 - The onboarding welcome text is shortened, and the logo is Sona's.
 
@@ -226,6 +231,7 @@ Each surface below lists what it contains, how it behaves and the Figma frames t
 ```
 
 **Title bar** (built):
+
 - **logo:** opens the system menu.
 - **⋯:** opens the main menu (5.6).
 - **sidebar:** toggles the compact library (5.5).
@@ -234,21 +240,31 @@ Each surface below lists what it contains, how it behaves and the Figma frames t
 - **⤢:** fullscreen.
 - **Windows buttons:** minimize, maximize, close.
 
-**Auto-hide** (to build):
-- Both bars show when the pointer moves near their edge, and hide immediately when it leaves.
-  Settings > Interface also allows hiding after 0–10 s.
+**Auto-hide** (built): one switch. Hide UI (Ctrl+\\, right-click menu) turns it on and Show UI turns
+it off. It starts on when the window opens to play media ("Open with", a file on the command line)
+and off for an empty launch, and works the same windowed, maximized and in full screen.
+
+- Off, the bars stay fixed with the video between them (`Player 247:445`).
+- On, the video fills the window and the bars sit over it, each auto-hiding on its own edge
+  (`player/AutoHideBar`): it shows as soon as the pointer is where the bar is, stays while the
+  pointer is on it or within 24 px past it, and hides 400 ms after the pointer has gone farther
+  unless it comes back (the hysteresis mpv's OSC and docking panels use, so brushing past never
+  flickers). Settings > Interface will also allow hiding after 0–10 s (P8).
+- Neither moves while a press or a popup is under way; both stay while there's no video to watch.
+- The video's rounded frame runs between the shown bars, so its corners stay rounded as they slide.
 - In fullscreen they work the same way (VLC hides the title; Sona doesn't).
-- The pointer hides with the bars.
+- The pointer hides over playing video after 2 s at rest with the bars out.
 
-**Hide UI** (Ctrl+\\, right-click menu): the video only, keeping its rounded frame, with no bars.
+**Resume prompt** (moved to P6, with the stored positions): "You've watched till 00:45:08 already.
+Continue Watching" (hidden layer in `247:445`).
 
-**Resume prompt:** "You've watched till 00:45:08 already. Continue Watching" (hidden layer in `247:445`).
 - It appears when you reopen a partly watched file.
 - Place it near the playback controls, where the video notes people will see it, not in a far corner.
 
 ### 5.2 Control bar
 
 **Component:** `Controls 491:1780`, with 15 variants:
+
 - default, queue, bookmarks, chapters, video, audio, subtitles, playback
 - video settings, audio settings, subtitle settings
 - sub timeline, waveform, music, Variant10
@@ -279,6 +295,7 @@ These are popovers anchored above the control bar's right side, about 400 wide, 
 overlay layer. Esc or a click outside closes them.
 
 **Tracks popover.** Tabs: Video · Audio · Subtitles.
+
 - **Embedded Tracks:** a list with a check on the current track ("None" first).
 - **External Tracks** (Subtitles, Audio):
   - files added for this media, with edit (✎) and add (+)
@@ -287,6 +304,7 @@ overlay layer. Esc or a click outside closes them.
 - **Footer:** "Show Preferences", which switches to the preferences panel on the same tab.
 
 **Preferences panel** (the "sidebar" in the video). Tabs: Playback · Video · Audio · Subtitles.
+
 - **Playback:**
   - toggles: Show Subtitle Timeline on Seekbar, Show Statistics, Reverse (not possible with libVLC 3;
     hide it or disable it with an explanation)
@@ -339,6 +357,7 @@ overlay layer. Esc or a click outside closes them.
   and an expanded variant.
 
 **Queue panel.** Tabs: Queue · Bookmarks · Chapters.
+
 - **Queue:**
   - "4 items - 2h 3m"
   - actions: sort, repeat, shuffle, remove (−), add (+)
@@ -388,6 +407,7 @@ and `970:3792` (list), `970:4028` (nothing playing), `6261:15078` (Home).
   - the queue toggle expands an attached Queue list
 
 **Sections** (content in `sidebar 848:1996`):
+
 - **Home:** Continue Watching, Listen Again, Frequently Visited Folders, Frequently Visited
   Playlists, Frequently Listened Artists, Latest Streams. Each has a › to see all.
 - **Videos:** the folders added by the user (Shows, Films, Anime…), browsable down to files.
@@ -402,6 +422,7 @@ and `970:3792` (list), `970:4028` (nothing playing), `6261:15078` (Home).
 - **Pins:** anything pinned with "+" or the context menu appears in the rail and navigation.
 
 **Context menus:**
+
 - **File** (`2404:13340`): Play, Mark as Watched, Favorite, Stream, Convert, Add to Queue, Add to
   Playlist, Show in File Explorer, Go to Source, Add Subtitle Tracks, Add Audio Tracks, Properties &
   Metadata.
@@ -476,6 +497,7 @@ All use `DialogFrame` (4.4). The width is 1048 unless noted.
 category, each with an advanced variant.
 
 Layout: 1048×865.
+
 - **Left:** a Search field, then categories grouped under headings with icons.
 - **Right:** the category title, then sections. Each row is a label with an ⓘ on the left and a
   control on the right (toggle, dropdown, segmented, slider, path field with Browse, button).
@@ -511,6 +533,7 @@ the commands registry.
 ### 5.10 Customize Player and profiles
 
 **Customize** (`Player - customize 2107:5604` and variants):
+
 - A dialog over the player titled "Customize Player": "Drag items around and out of the box below to
   re-order them. Drag items into the box to remove them from the player."
 - While it's open, both bars show dashed outlines around each slot.
@@ -522,6 +545,7 @@ the commands registry.
 - Variants `2160:6137`…`8732` show an item being dragged and alternative layouts.
 
 **Profiles** (`Profiles 6648:20666`):
+
 - Named sets of all settings plus the layout (Movies, Shows, Music, Work), switched from the main
   menu's Profile submenu.
 - New creates one from the current settings.
@@ -541,6 +565,7 @@ These are the pieces the screens above need, in the order they unblock work. Eac
 ### 6.1 Commands registry (`commands/`)
 
 Every user action has a single entry:
+
 - `id`, label, monochrome and two-tone icon names
 - default shortcut(s), and `run`/`enabled`/`checked` callbacks
 
@@ -584,6 +609,7 @@ Everything keeps the engine-thread rule: commands are `post`ed, and state is mir
 ### 6.4 Data (`data/`)
 
 App data that isn't a preference lives in `%LOCALAPPDATA%\Sona\`:
+
 - library folders and index, watched state and positions
 - playlists, pins, recents, bookmarks
 - subtitle associations, presets, profiles, saved streams
@@ -641,6 +667,7 @@ This is decision D1 below.
 | Extensions | `dialogs/extensions` | Not exposed by libVLC 3 |
 
 Not libVLC features (our own work):
+
 - seek-bar thumbnails (a second decoder)
 - the subtitle timeline (parse the subtitle file)
 - the waveform (decode the audio)
@@ -652,6 +679,7 @@ Reverse playback and the previous frame aren't possible with libVLC 3.
 ## 7. Phased plan
 
 Each phase ends with something visible and checkable.
+
 - **Verify by:** building debug and release with zero warnings, running the app, and comparing
   screenshots against the Figma PNG of the same frame, in both themes, at 100% and 125% scale.
 - **Commit:** each phase to `dev` when it works.
@@ -659,19 +687,19 @@ Each phase ends with something visible and checkable.
 | Phase | Goal | Steps | Done when |
 | --- | --- | --- | --- |
 | **P1 Foundation** | Toolkit and commands | 6.1 commands registry; `Column`, alignment and padding; `ScrollView`; overlay layer; popup window; `Tooltip`; frame clock; `Toggle`, `Dropdown`, `Segmented`, `Slider`, `Tabs`, `ListRow`, `Button`, `DialogFrame`; `TextField` | A test page shows every widget in both themes; keyboard shortcuts run through the registry. |
-| **P2 Player chrome** | 5.1, 5.2, 5.6 | Auto-hide bars (windowed and fullscreen), Hide UI, main menu, right-click menu, duration toggle, volume bubble, on-screen shortcut messages, resume prompt, bars built from a layout definition | Matches `Player 247:445` and `3328:11554`; menus match `6062:13354` and `6065:13616`. |
+| **P2 Player chrome** | 5.1, 5.2, 5.6 | Auto-hide bars (windowed and fullscreen), Hide UI, main menu, right-click menu, duration toggle, volume bubble, on-screen shortcut messages, bars built from a layout definition | Matches `Player 247:445` and `3328:11554`; menus match `6062:13354` and `6065:13616`. |
 | **P3 Queue** | 6.3 queue, 5.3 queue panel | Queue model, previous/next, add/drag files, reorder, repeat, shuffle, sort, remove; Bookmarks (`data/`) and Chapters tabs; Q and Ctrl+B | Plays a folder through; the panel matches the `Controls` queue, bookmarks and chapters variants. |
 | **P4 Tracks** | 5.3 tracks popover | Track lists, external subtitles/audio, output devices, "Show Preferences" | One click switches subtitle and audio track and the output device. |
 | **P5 Preferences panel** | 5.3 preferences | Four tabs with live libVLC effects, sliders, EQ and filter groups, presets saved per show | Changes apply live and survive restarts through presets. |
-| **P6 Data and library** | 6.4, 6.5, 5.5 | Database; indexer; compact sidebar; full library (grid/list, sort, search, view); Home; Music categories; Network streams; Playlists; Recent; pins; miniplayer; context menus; watched/progress | Add a folder and browse it in both modes; play from the library into the queue without leaving the video. |
+| **P6 Data and library** | 6.4, 6.5, 5.5 | Database; indexer; resume prompt (5.1); compact sidebar; full library (grid/list, sort, search, view); Home; Music categories; Network streams; Playlists; Recent; pins; miniplayer; context menus; watched/progress | Add a folder and browse it in both modes; play from the library into the queue without leaving the video. |
 | **P7 Dialogs** | 5.7 | Open File/Folder/Network/Disc/Capture, New Playlist, Add Subtitles (computer, folder matching, OpenSubtitles), Keyboard Shortcuts editor, About | Each matches its frame; subtitles added to a folder apply to every episode. |
 | **P8 Settings** | 6.6, 5.8 | Settings schema; generated window; search; advanced options; libVLC option mapping; Profiles | All 13 categories match their frames, basic and advanced; changing an option takes effect. |
 | **P9 Media extras** | 5.4, 5.2 | Music view with blurred cover art; seek thumbnails; subtitle timeline; waveform; visualizer; sleep timer; statistics | Matches `Player - Music 4767:23726`; seeking shows previews. |
 | **P10 Customize and streaming** | 5.10, 6.8 | Customize Player drag-and-drop editor; profiles with layouts; convert, stream, record, casting | A rearranged layout persists per profile; a file casts to a device. |
 | **P11 Polish** | all | Light theme pass, accessibility (UI Automation names, keyboard focus), performance (startup < 300 ms, idle memory), installer associations | Both themes match Figma; Narrator reads the controls. |
 
-Progress: P0 (foundation, playback, onboarding, packaging) and P1 (toolkit and commands) are done.
-Next: **P2**.
+Progress: P0 (foundation, playback, onboarding, packaging), P1 (toolkit and commands) and P2 (player
+chrome) are done. Next: **P3**.
 
 ---
 

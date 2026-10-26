@@ -18,3 +18,5 @@ struct KeyChord
 
 // The chord's keys as keycaps name them, modifiers first: {"SHIFT", "S"}, {"Space"}, {"←"}.
 std::vector<std::wstring> keyNames(KeyChord chord);
+// The chord as menus write it: "Ctrl + O", "Shift + F1", "Space".
+std::wstring shortcutText(KeyChord chord);

@@ -2,51 +2,24 @@
 
 #include <shellapi.h>
 
-#include <algorithm>
-
-#include "graphics/Canvas.h"
 #include "maininterface/MainCommands.h"
-#include "maininterface/TitleBar.h"
+#include "maininterface/MainMenus.h"
 #include "onboarding/OnboardingWindow.h"
 #include "platform/FileDialogs.h"
+#include "platform/PopupWindow.h"
 #include "playback/Player.h"
-#include "player/ControlBar.h"
+#include "player/PlayerView.h"
+#include "player/TitleBar.h"
 #include "player/VideoHost.h"
 #include "player/VideoView.h"
 #include "settings/AppSettings.h"
-#include "style/Theme.h"
+#include "widgets/Overlay.h"
 
 namespace {
 
-// The player layout: video between the title bar and the control bar. The video is added first so
-// the bars paint over the outer half of its rounded frame.
-class MainView : public View
-{
-public:
-    explicit MainView(Player &player)
-        : video(add<VideoView>(player))
-        , titleBar(add<TitleBar>(player))
-        , controlBar(add<ControlBar>(player))
-    {
-    }
-
-    void layout() override
-    {
-        const float width = frame().width;
-        const float height = frame().height;
-        // The title bar is as tall as Windows' caption buttons, which change with the window state.
-        const float titleHeight = window() ? window()->captionHeight() : 0;
-        titleBar.setFrame({0, 0, width, titleHeight});
-        controlBar.setFrame({0, height - 54, width, 54});
-        video.setFrame({10, titleHeight + 1, width - 20, std::max(0.0f, height - 54 - titleHeight - 1)});
-    }
-
-    void paint(Canvas &canvas) override { canvas.fillRect(bounds(), canvas.palette().bgA3); }
-
-    VideoView &video;
-    TitleBar &titleBar;
-    ControlBar &controlBar;
-};
+// Figma's menu widths (6062:13354, 6065:13616).
+constexpr float mainMenuWidth = 375;
+constexpr float contextMenuWidth = 292;
 
 } // namespace
 
@@ -60,11 +33,11 @@ MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &se
     m_videoHost = std::make_unique<VideoHost>(hwnd());
     player.setVideoWindow(m_videoHost->hwnd());
 
-    auto view = std::make_unique<MainView>(player);
-    m_titleBar = &view->titleBar;
-    m_videoView = &view->video;
+    auto view = std::make_unique<PlayerView>(BarContext{player, settings, m_commands, [this](View &button) {
+        Menu::open(*this, button.mapToWindow(button.bounds()), PopupPlacement::Below, mainMenuItems(), m_commands, mainMenuWidth);
+    }});
+    m_playerView = view.get();
     setRoot(std::move(view));
-    setNativeCaption(&Palette::bgA3);
     updateTitle();
 
     DragAcceptFiles(hwnd(), TRUE);
@@ -78,16 +51,46 @@ void MainWindow::showOnboarding()
     openWindow<OnboardingWindow>(graphics(), theme(), m_settings, m_player, m_commands, hwnd());
 }
 
+bool MainWindow::barsAutoHide() const
+{
+    return m_playerView->barsAutoHide();
+}
+
+void MainWindow::setBarsAutoHide(bool autoHide)
+{
+    m_playerView->setBarsAutoHide(autoHide);
+    // The video moves between beside the bars and under them.
+    layoutChanged();
+}
+
 void MainWindow::layoutChanged()
 {
-    if (!m_videoHost || !m_videoView)
+    if (!m_videoHost || !m_playerView)
         return;
-    m_videoHost->setBounds(contentToClientPixels(m_videoView->frame()));
+    m_videoHost->setBounds(contentToClientPixels(m_playerView->video().frame()));
 }
 
 bool MainWindow::keyPressed(KeyChord chord)
 {
-    return m_commands.runShortcut(chord);
+    const std::optional<CommandId> command = m_commands.commandFor(chord);
+    if (!command)
+        return false;
+    // Named before it runs, for the state it changes (Pause while playing).
+    const std::wstring message = m_commands.label(*command) + L"  ·  " + shortcutText(chord);
+    m_commands.run(*command);
+    overlay().showMessage(message);
+    return true;
+}
+
+void MainWindow::pointerChanged()
+{
+    if (m_playerView)
+        m_playerView->pointerChanged();
+}
+
+void MainWindow::contextMenuRequested(Point point)
+{
+    Menu::open(*this, {point.x, point.y, 0, 0}, PopupPlacement::Beside, contextMenuItems(), m_commands, contextMenuWidth);
 }
 
 void MainWindow::filesDropped(HDROP drop)
@@ -123,5 +126,5 @@ void MainWindow::updateTitle()
         return;
     m_title = title;
     SetWindowTextW(hwnd(), title.c_str());
-    m_titleBar->setTitle(title);
+    m_playerView->titleBar().setTitle(title);
 }

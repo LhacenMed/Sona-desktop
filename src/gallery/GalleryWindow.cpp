@@ -22,6 +22,7 @@
 #include "widgets/Tabs.h"
 #include "widgets/TextField.h"
 #include "widgets/Toggle.h"
+#include "widgets/WindowButtons.h"
 
 namespace {
 
@@ -81,10 +82,16 @@ public:
     }
 };
 
-// The band Windows draws its caption buttons in, which moves the window.
-class CaptionBand : public View
+// The title bar: it moves the window and ends with Windows' buttons.
+class CaptionBand : public Row
 {
 public:
+    CaptionBand()
+    {
+        add<View>().setFillsWidth(true);
+        add<WindowButtons>();
+    }
+
     bool takesMouse() const override { return true; }
     HitRole hitRole() const override { return HitRole::Caption; }
 };
@@ -159,12 +166,7 @@ public:
         m_scroll->setFrame({0, top, frame().width, frame().height - top});
     }
 
-    void paint(Canvas &canvas) override
-    {
-        // Windows paints the caption; the page is below it.
-        canvas.clear(m_caption->frame(), Color{});
-        canvas.fillRect(m_scroll->frame(), canvas.palette().bgB1);
-    }
+    void paint(Canvas &canvas) override { canvas.fillRect(bounds(), canvas.palette().bgB1); }
 
 private:
     // A heading and the row its samples go in.
@@ -205,7 +207,6 @@ GalleryWindow::GalleryWindow(GraphicsDevice &graphics, Theme &theme, SettingsSto
 {
     create(L"Sona widgets", {1000, 800}, {640, 480}, WindowFrame::Resizable, nullptr);
     setRoot(std::make_unique<GalleryView>(*this, theme, settings));
-    setNativeCaption(&Palette::bgB1);
     show(false);
 }
 

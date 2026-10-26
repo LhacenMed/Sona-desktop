@@ -2,15 +2,29 @@
 
 #include <algorithm>
 
-bool CommandRegistry::runShortcut(KeyChord chord) const
+std::wstring CommandRegistry::label(CommandId id) const
 {
-    for (const auto &[id, command] : m_commands) {
-        if (!command.run || std::ranges::find(command.shortcuts, chord) == command.shortcuts.end())
-            continue;
-        if (command.enabled && !command.enabled())
-            continue;
-        command.run();
-        return true;
+    const Command &entry = command(id);
+    return entry.active && entry.active() ? entry.activeLabel : entry.label;
+}
+
+bool CommandRegistry::canRun(CommandId id) const
+{
+    const Command &entry = command(id);
+    return entry.run && (!entry.enabled || entry.enabled());
+}
+
+void CommandRegistry::run(CommandId id) const
+{
+    if (canRun(id))
+        command(id).run();
+}
+
+std::optional<CommandId> CommandRegistry::commandFor(KeyChord chord) const
+{
+    for (const auto &[id, entry] : m_commands) {
+        if (std::ranges::find(entry.shortcuts, chord) != entry.shortcuts.end() && canRun(id))
+            return id;
     }
-    return false;
+    return {};
 }

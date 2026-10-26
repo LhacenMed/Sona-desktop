@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
 
 #include "graphics/Canvas.h"
+#include "platform/Window.h"
 #include "playback/Player.h"
 #include "style/Theme.h"
+#include "widgets/Overlay.h"
 
 namespace {
 
@@ -50,8 +53,14 @@ void VolumeBar::mouseDragged(Point point)
     setVolumeAt(point.x);
 }
 
+void VolumeBar::mouseReleased(Point, bool)
+{
+    window()->overlay().hideValue();
+}
+
 void VolumeBar::setVolumeAt(float x)
 {
     const float fill = std::clamp(x, fillWidths.front(), frame().width);
     m_player.setVolume(static_cast<int>(std::lround(interpolate(fill, fillWidths, levels))));
+    window()->overlay().showValue(*this, std::format(L"{} %", m_player.volume()));
 }

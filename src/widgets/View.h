@@ -12,9 +12,10 @@
 class Canvas;
 class Window;
 
-// What a point of a window does for the window frame: regular content, or part of the title bar.
-// The caption buttons are Windows' own (Window::setNativeCaption), so they need no role.
-enum class HitRole { Client, Caption, SystemMenu };
+// What a point of a window does for the window frame: regular content, or part of the title bar,
+// including its minimize, maximize and close buttons (which is what gives the maximize button
+// Windows 11's Snap Layouts).
+enum class HitRole { Client, Caption, SystemMenu, Minimize, Maximize, Close };
 
 // The pointer's shape over a view.
 enum class Cursor { Arrow, Hand, Text };
@@ -82,6 +83,7 @@ public:
     // view. Returns whether the view scrolled; otherwise its parent is offered the scroll.
     virtual bool wheelScrolled(float /*notches*/) { return false; }
     bool isHovered() const { return m_hovered; }
+    virtual void hoverChanged() {}
     // How far the hover tint has faded in, 0–1: hover feedback eases in and out, as Windows' does.
     float hoverAmount() const { return m_hover.value(*this); }
     bool isPressed() const { return m_pressed; }

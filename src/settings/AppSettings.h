@@ -15,5 +15,7 @@ inline const Setting<bool> onboardingCompleted{L"onboardingCompleted", false};
 inline const Setting<ThemeMode> theme{L"theme", ThemeMode::System};
 inline const Setting<int> accentIndex{L"accentIndex", 0};
 inline const Setting<std::wstring> mediaFolder{L"mediaFolder", knownFolderPath(FOLDERID_Videos)};
+// The control bar shows the time left instead of the duration.
+inline const Setting<bool> showRemainingTime{L"showRemainingTime", false};
 
 } // namespace AppSettings

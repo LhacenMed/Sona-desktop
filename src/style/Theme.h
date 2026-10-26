@@ -40,6 +40,7 @@ struct Palette
     Color bgAccentDark;
     Color bgA2;
     Color bgA3;
+    Color bgA3Transparent;
     Color bgA4;
     Color bgA5;
     Color bgB1;

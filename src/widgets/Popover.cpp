@@ -1,9 +1,9 @@
 #include "widgets/Popover.h"
 
 #include "graphics/Canvas.h"
-#include "style/Theme.h"
+#include "style/Surface.h"
 
 void Popover::paint(Canvas &canvas)
 {
-    canvas.fillRoundedRect(bounds(), 10, canvas.palette().bgB1Transparent);
+    canvas.fillSurface(bounds(), Surfaces::panel);
 }

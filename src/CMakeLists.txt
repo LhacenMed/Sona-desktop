@@ -6,10 +6,9 @@ add_executable(sona WIN32
     graphics/Canvas.cpp
     graphics/GraphicsDevice.cpp
     graphics/WindowSurface.cpp
-    maininterface/CaptionButton.cpp
     maininterface/MainCommands.cpp
+    maininterface/MainMenus.cpp
     maininterface/MainWindow.cpp
-    maininterface/TitleBar.cpp
     onboarding/KeyCap.cpp
     onboarding/OnboardingWindow.cpp
     onboarding/ShortcutsPage.cpp
@@ -25,10 +24,14 @@ add_executable(sona WIN32
     platform/Timer.cpp
     platform/Window.cpp
     playback/Player.cpp
+    player/AutoHideBar.cpp
+    player/BarItems.cpp
     player/ControlBar.cpp
     player/PlayButton.cpp
+    player/PlayerView.cpp
     player/SeekBar.cpp
     player/TimeLabel.cpp
+    player/TitleBar.cpp
     player/VideoHost.cpp
     player/VideoView.cpp
     player/VolumeBar.cpp
@@ -36,12 +39,14 @@ add_executable(sona WIN32
     style/Theme.cpp
     widgets/Animation.cpp
     widgets/Button.cpp
+    widgets/CaptionButton.cpp
     widgets/DialogWindow.cpp
     widgets/Dropdown.cpp
     widgets/Icon.cpp
     widgets/IconButton.cpp
     widgets/Label.cpp
     widgets/ListRow.cpp
+    widgets/Menu.cpp
     widgets/Overlay.cpp
     widgets/Popover.cpp
     widgets/ScrollView.cpp
@@ -52,6 +57,7 @@ add_executable(sona WIN32
     widgets/TextField.cpp
     widgets/Toggle.cpp
     widgets/View.cpp
+    widgets/WindowButtons.cpp
     # The widget gallery (sona.exe --gallery), for checking the toolkit against Figma.
     $<$<CONFIG:Debug>:gallery/GalleryWindow.cpp>
 )

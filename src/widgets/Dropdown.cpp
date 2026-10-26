@@ -5,6 +5,7 @@
 
 #include "graphics/Canvas.h"
 #include "platform/PopupWindow.h"
+#include "style/Surface.h"
 #include "style/Theme.h"
 #include "widgets/Icon.h"
 
@@ -158,7 +159,7 @@ void Dropdown::mouseReleased(Point, bool inside)
     // The list opens over the field, its first option where the field is (Figma's open state).
     Window *host = window();
     const Rect field = mapToWindow(bounds());
-    host->openWindow<PopupWindow>(*host, Point{field.x, field.y},
+    host->openWindow<PopupWindow>(*host, field, PopupPlacement::Over, Surfaces::list,
                                   std::make_unique<OptionList>(m_options, m_selected, field.width, [this](int index) { pick(index); }));
 }
 

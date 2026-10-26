@@ -1,23 +1,16 @@
 #pragma once
 
-#include "core/Signal.h"
 #include "widgets/Stack.h"
 
-class IconButton;
-class Player;
+struct BarContext;
 
-// Figma "Controls" (491:1779): transport, seek, volume and panel buttons.
+// Figma "Controls" (491:1779): the layout's control-bar groups, 20 apart.
 class ControlBar : public Row
 {
 public:
-    explicit ControlBar(Player &player);
+    explicit ControlBar(BarContext &context);
 
+    // Clicks between its controls stay on the bar.
+    bool takesMouse() const override { return true; }
     void paint(Canvas &canvas) override;
-
-private:
-    const wchar_t *volumeIcon() const;
-
-    Player &m_player;
-    IconButton *m_volumeButton;
-    Subscription m_playerSubscription;
 };

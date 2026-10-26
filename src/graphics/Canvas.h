@@ -17,6 +17,7 @@
 class GraphicsDevice;
 class Theme;
 struct Palette;
+struct Surface;
 
 // Replaces one color of an SVG asset, as Figma wrote it (0xRRGGBB), when drawing it.
 struct ColorSwap
@@ -51,6 +52,9 @@ public:
     void scale(float factor);
     void pushClip(const Rect &rect);
     void popClip();
+    // Draws everything until popOpacity at `opacity`, as one layer.
+    void pushOpacity(float opacity);
+    void popOpacity();
 
     // Replaces the pixels in `rect`, unlike the fills, which blend over them.
     void clear(const Rect &rect, Color color);
@@ -63,6 +67,8 @@ public:
     void strokeCircle(Point center, float radius, float width, Color color);
     // A Figma drop shadow under a rounded rectangle: `blur` is Figma's blur radius.
     void drawShadow(const Rect &rect, float radius, Point offset, float blur, Color color);
+    // A Figma surface (style/Surface.h): its shadow, then its fill.
+    void fillSurface(const Rect &rect, const Surface &surface);
     void drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color);
     // Draws an SVG from assets/ stretched to `rect`.
     void drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps = {});

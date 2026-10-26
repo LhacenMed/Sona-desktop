@@ -4,6 +4,7 @@
 #include <shellapi.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,10 +25,11 @@ class WindowSurface;
 enum class WindowFrame { Resizable, Fixed, Popup };
 
 // A top-level window whose content reaches into the title bar while keeping the native frame: resize
-// borders, Aero Snap, the system menu, window animations, the DWM shadow and rounded corners, and
-// (setNativeCaption) Windows' own caption buttons with Snap Layouts. Its content is a tree of Views
-// drawn with Direct2D, under an Overlay for popovers and tooltips; views tell the frame which parts
-// act as title bar (HitRole).
+// borders, Aero Snap, the system menu, window animations, the DWM shadow and rounded corners. Its
+// content is a tree of Views drawn with Direct2D, under an Overlay for popovers and callouts. The
+// title bar is views too, which tell the frame what they are (HitRole): the caption, the system
+// menu, and the minimize, maximize and close buttons, drawn at Windows' own size (captionButtonSize)
+// and answering as Windows' own, so Snap Layouts work.
 //
 // Input goes to views: the mouse to the view under it, keys to the focused view and then to the
 // window's shortcuts (keyPressed). An open popup takes the keys first. An open popup or popover
@@ -44,12 +46,23 @@ public:
     bool isActive() const { return m_active; }
     bool isMaximized() const;
     bool isFullScreen() const { return m_fullScreen; }
-    // Where Windows draws the caption buttons, in the root view's DIPs; empty when it draws none.
-    Rect captionButtonBounds() const;
-    // The title bar height that lines up with the caption buttons, in DIPs. It changes with the
-    // window state (a maximized window's buttons are shorter), DPI and system metrics.
-    float captionHeight() const;
+    // One of Windows' caption buttons (minimize, maximize, close) in DIPs, measured for this monitor
+    // and window state: a maximized window's are shorter.
+    Size captionButtonSize() const;
+    // The title bar height that matches the caption buttons.
+    float captionHeight() const { return captionButtonSize().height; }
     Overlay &overlay() const { return *m_overlay; }
+
+    // Where the pointer is over the client area, in DIPs (as View::mapFromWindow takes it); empty
+    // when it's elsewhere.
+    std::optional<Point> pointerPosition() const { return m_pointer; }
+    // Whether a press is held on a view, and whether a popup is open over this window.
+    bool isPressing() const { return m_pressed != nullptr; }
+    bool hasPopup() const { return m_popup != nullptr; }
+    // Closes the popup open over this window, and any popup it owns.
+    void closePopup();
+    // Hides the pointer over the client area until it next moves.
+    void hidePointer();
 
     // Shows the window after drawing its first frame, so it never appears empty.
     void show(bool maximized);
@@ -81,10 +94,6 @@ protected:
     // Creates a popup over `owner` (see PopupWindow), covering `screenPixels`.
     void createPopup(HWND owner, const RECT &screenPixels);
     void setRoot(std::unique_ptr<View> root);
-    // Gives the top of the content (captionHeight) to the native caption: Windows paints it in the
-    // `background` colour and draws its minimize, maximize and close buttons there, and the views over
-    // it leave their background transparent.
-    void setNativeCaption(Color Palette::*background);
     Theme &theme() const { return m_theme; }
     // A rectangle of the root view in client pixels, for child windows.
     RECT contentToClientPixels(const Rect &rect) const;
@@ -94,6 +103,10 @@ protected:
     virtual void layoutChanged() {}
     // A key that no view handled.
     virtual bool keyPressed(KeyChord) { return false; }
+    // The pointer moved, left, or a press or popup that held it ended (pointerPosition).
+    virtual void pointerChanged() {}
+    // A right click or the menu key over the content, at a point of the client area in DIPs.
+    virtual void contextMenuRequested(Point) {}
     virtual void filesDropped(HDROP) {}
     virtual void closeRequested();
     virtual void destroyed() {}
@@ -106,7 +119,10 @@ private:
     void createWindow(const std::wstring &title, DWORD style, DWORD extendedStyle, const RECT &bounds, HWND owner);
     LRESULT handleMessage(UINT message, WPARAM wParam, LPARAM lParam);
     LRESULT hitTest(LPARAM screenPoint);
+    // Mouse messages over the caption buttons, which Windows sends as non-client ones.
+    bool captionButtonMessage(UINT message, WPARAM hit, LPARAM screenPoint);
     Point toDips(POINT clientPoint) const;
+    Point screenToDips(LPARAM screenPoint) const;
     // Where the content (the root view) starts below the client area's top, in DIPs.
     float contentTop() const;
     // The view under a point of the client area, in DIPs: the overlay's first, then the content's.
@@ -120,6 +136,9 @@ private:
     void render();
     bool handleKey(KeyChord chord);
     void pointerMoved(Point point);
+    void pointerLeft();
+    // Shows the pointer the view under it asks for, or none while it's hidden.
+    void applyCursor();
     void pointerPressed(Point point);
     void pointerReleased(Point point);
     void wheelScrolled(Point point, float notches);
@@ -127,7 +146,6 @@ private:
     static View *deepestViewAt(View &view, Point point);
     void cancelPress();
     void setHovered(View *view);
-    void closePopup();
     // Puts the IME's composition and candidate windows at the focused view's caret.
     void placeImeWindows();
     // Lets go of the views of a subtree that's being removed.
@@ -139,15 +157,18 @@ private:
     float m_dpi = USER_DEFAULT_SCREEN_DPI;
     WindowFrame m_frame = WindowFrame::Resizable;
     Size m_minimumSize;
-    bool m_nativeCaption = false;
-    // Windows' caption buttons together, in pixels from the window's top edge (measureCaptionButtons).
+    // Windows' three caption buttons together, in pixels from the window's top edge, restored, and
+    // the bottom of a maximized window's (whose top edge lies off screen).
     SIZE m_captionButtons{};
+    LONG m_maximizedCaptionBottom = 0;
     int m_frameMarginTop = -1;
-    Color Palette::*m_captionBackground = nullptr;
     bool m_active = false;
     bool m_fullScreen = false;
     WINDOWPLACEMENT m_placementBeforeFullScreen{sizeof(WINDOWPLACEMENT)};
     bool m_trackingMouse = false;
+    bool m_trackingNonClientMouse = false;
+    std::optional<Point> m_pointer;
+    bool m_pointerHidden = false;
     std::unique_ptr<WindowSurface> m_surface;
     std::unique_ptr<View> m_root;
     std::unique_ptr<Overlay> m_overlay;

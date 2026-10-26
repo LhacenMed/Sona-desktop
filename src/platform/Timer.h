@@ -17,6 +17,7 @@ public:
     // Restarts the timer if it's running.
     void start(std::chrono::milliseconds interval, bool repeating);
     void stop();
+    bool isActive() const { return m_id != 0; }
 
 private:
     static void CALLBACK fired(HWND, UINT, UINT_PTR id, DWORD);

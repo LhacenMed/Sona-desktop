@@ -9,6 +9,7 @@
 #include "graphics/GraphicsDevice.h"
 #include "platform/HResult.h"
 #include "platform/Resources.h"
+#include "style/Surface.h"
 #include "style/Theme.h"
 
 using Microsoft::WRL::ComPtr;
@@ -94,6 +95,18 @@ void Canvas::popClip()
     m_context->PopAxisAlignedClip();
 }
 
+void Canvas::pushOpacity(float opacity)
+{
+    m_context->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                D2D1::IdentityMatrix(), opacity),
+                         nullptr);
+}
+
+void Canvas::popOpacity()
+{
+    m_context->PopLayer();
+}
+
 void Canvas::clear(const Rect &rect, Color color)
 {
     pushClip(rect);
@@ -161,6 +174,13 @@ void Canvas::drawShadow(const Rect &rect, float radius, Point offset, float blur
     check(shadow->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, blur / 2));
     check(shadow->SetValue(D2D1_SHADOW_PROP_COLOR, D2D1::Vector4F(color.r, color.g, color.b, color.a)));
     m_context->DrawImage(shadow.Get(), D2D1::Point2F(offset.x, offset.y));
+}
+
+void Canvas::fillSurface(const Rect &rect, const Surface &surface)
+{
+    if (surface.shadowOpacity > 0)
+        drawShadow(rect, surface.radius, surface.shadowOffset, surface.shadowBlur, Color::hex(0x000000, surface.shadowOpacity));
+    fillRoundedRect(rect, surface.radius, palette().*surface.fill);
 }
 
 void Canvas::drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color)

@@ -6,48 +6,58 @@
 #include <cmath>
 
 #include "graphics/Canvas.h"
-#include "style/Theme.h"
+#include "style/Surface.h"
 #include "widgets/View.h"
 
 namespace {
 
-// Figma's dropdown list surface (2372:8307): 6px corners and a drop shadow 4px down with a 13.8px
-// blur, which needs this much transparent room around the surface.
-constexpr float shadowMargin = 18;
-
+// The surface with its shadow, around the content, in a window with room for the shadow.
 class PopupFrame : public View
 {
 public:
-    explicit PopupFrame(std::unique_ptr<View> content) : m_content(add(std::move(content))) {}
+    PopupFrame(const Surface &surface, std::unique_ptr<View> content)
+        : m_surface(surface)
+        , m_content(add(std::move(content)))
+    {
+    }
 
     void layout() override
     {
-        m_content.setFrame({shadowMargin, shadowMargin, frame().width - 2 * shadowMargin, frame().height - 2 * shadowMargin});
+        const float margin = m_surface.shadowReach();
+        m_content.setFrame({margin, margin, frame().width - 2 * margin, frame().height - 2 * margin});
     }
 
     void paint(Canvas &canvas) override
     {
         canvas.clear(bounds(), Color{});
-        const Rect surface = m_content.frame();
-        canvas.drawShadow(surface, 6, {0, 4}, 13.8f, Color::hex(0x000000, 0.35f));
-        canvas.fillRoundedRect(surface, 6, canvas.palette().bgA4);
+        canvas.fillSurface(m_content.frame(), m_surface);
     }
 
 private:
+    const Surface &m_surface;
     View &m_content;
 };
 
+// Where a popup starts along one axis: at `start`, or at `fallback` when it would leave the screen
+// there, then moved to stay on screen.
+LONG place(LONG start, LONG fallback, LONG length, LONG screenStart, LONG screenEnd)
+{
+    const LONG position = start + length <= screenEnd ? start : fallback >= screenStart ? fallback : start;
+    return std::clamp(position, screenStart, std::max(screenStart, screenEnd - length));
+}
+
 } // namespace
 
-PopupWindow::PopupWindow(Window &owner, Point anchor, std::unique_ptr<View> content)
+PopupWindow::PopupWindow(Window &owner, Rect anchor, PopupPlacement placement, const Surface &surface,
+                         std::unique_ptr<View> content)
     : Window(owner.graphics(), owner.theme())
     , m_content(content.get())
 {
     owner.closePopup();
 
     // Sized at the DPI of the monitor it opens on.
-    const RECT anchorPixels = owner.toScreenPixels({anchor.x, anchor.y, 0, 0});
-    const HMONITOR monitor = MonitorFromPoint({anchorPixels.left, anchorPixels.top}, MONITOR_DEFAULTTONEAREST);
+    const RECT target = owner.toScreenPixels(anchor);
+    const HMONITOR monitor = MonitorFromPoint({target.left, target.top}, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     GetMonitorInfoW(monitor, &monitorInfo);
     UINT dpi = USER_DEFAULT_SCREEN_DPI;
@@ -55,18 +65,32 @@ PopupWindow::PopupWindow(Window &owner, Point anchor, std::unique_ptr<View> cont
     GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &unusedDpiY);
     const float s = static_cast<float>(dpi) / USER_DEFAULT_SCREEN_DPI;
     const Size size = m_content->preferredSize();
-    const LONG margin = std::lround(shadowMargin * s);
-    const LONG width = std::lround(size.width * s) + 2 * margin;
-    const LONG height = std::lround(size.height * s) + 2 * margin;
+    const LONG width = std::lround(size.width * s);
+    const LONG height = std::lround(size.height * s);
 
-    // The surface's top-left at the anchor, moved up or left to stay on the monitor.
     const RECT &work = monitorInfo.rcWork;
-    const LONG left = std::clamp(anchorPixels.left - margin, work.left - margin, std::max(work.left - margin, work.right + margin - width));
-    const LONG top = std::clamp(anchorPixels.top - margin, work.top - margin, std::max(work.top - margin, work.bottom + margin - height));
-    createPopup(owner.hwnd(), {left, top, left + width, top + height});
-    setRoot(std::make_unique<PopupFrame>(std::move(content)));
+    const bool beside = placement == PopupPlacement::Beside;
+    const bool below = placement == PopupPlacement::Below;
+    const LONG left = place(beside ? target.right : target.left, beside ? target.left - width : target.right - width, width,
+                            work.left, work.right);
+    const LONG top = place(below ? target.bottom : target.top, below ? target.top - height : target.bottom - height, height,
+                           work.top, work.bottom);
+
+    // The window reaches past the surface by its shadow.
+    const LONG margin = std::lround(surface.shadowReach() * s);
+    createPopup(owner.hwnd(), {left - margin, top - margin, left + width + margin, top + height + margin});
+    setRoot(std::make_unique<PopupFrame>(surface, std::move(content)));
     owner.m_popup = this;
     show(false);
+}
+
+void PopupWindow::closeChain()
+{
+    Window *outermost = this;
+    while (outermost->m_owner->m_frame == WindowFrame::Popup)
+        outermost = outermost->m_owner;
+    // At once, so whatever runs next (a file dialog) never shows over a menu.
+    outermost->m_owner->closePopup();
 }
 
 bool PopupWindow::keyPressed(KeyChord chord)

@@ -4,6 +4,7 @@
 
 #include "widgets/View.h"
 
+class CommandRegistry;
 class Label;
 class Player;
 class SettingsStore;
@@ -13,7 +14,7 @@ class Theme;
 class ThemePage : public View
 {
 public:
-    ThemePage(Theme &theme, SettingsStore &settings, Player &player);
+    ThemePage(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands);
 
     void layout() override;
 

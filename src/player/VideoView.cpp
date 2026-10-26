@@ -17,5 +17,6 @@ void VideoView::paint(Canvas &canvas)
         canvas.clear(bounds(), Color{});
     else
         canvas.fillRect(bounds(), palette.bgB2);
-    canvas.strokeRoundedRect(bounds().inflated(10), 19, 20, palette.bgA3);
+    const Rect area = m_visibleArea.width > 0 ? m_visibleArea : bounds();
+    canvas.strokeRoundedRect(area.inflated(10), 19, 20, palette.bgA3);
 }

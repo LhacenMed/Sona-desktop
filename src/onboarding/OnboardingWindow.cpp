@@ -28,7 +28,7 @@ public:
     OnboardingView(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands,
                    std::function<void()> finish)
         : m_dragBand(add<DragBand>())
-        , m_pages{&add<WelcomePage>(settings), &add<ThemePage>(theme, settings, player), &add<ShortcutsPage>(commands)}
+        , m_pages{&add<WelcomePage>(settings), &add<ThemePage>(theme, settings, player, commands), &add<ShortcutsPage>(commands)}
         , m_back(add<Button>(L"Back", ButtonKind::Secondary, buttonStyle))
         , m_next(add<Button>(L"Next", ButtonKind::Primary, buttonStyle))
     {

@@ -3,8 +3,9 @@
 #include <string>
 
 #include "graphics/Canvas.h"
-#include "maininterface/TitleBar.h"
+#include "player/BarItems.h"
 #include "player/ControlBar.h"
+#include "player/TitleBar.h"
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
 #include "widgets/Label.h"
@@ -18,9 +19,10 @@ constexpr TextStyle headingStyle{.size = 24, .weight = DWRITE_FONT_WEIGHT_LIGHT,
 class PlayerPreview : public View
 {
 public:
-    explicit PlayerPreview(Player &player)
-        : m_titleBar(add<TitleBar>(player, true))
-        , m_controlBar(add<ControlBar>(player))
+    PlayerPreview(SettingsStore &settings, Player &player, const CommandRegistry &commands)
+        : m_context{player, settings, commands, [](View &) {}}
+        , m_titleBar(add<TitleBar>(m_context))
+        , m_controlBar(add<ControlBar>(m_context))
     {
     }
 
@@ -47,6 +49,7 @@ public:
     View *hitTest(Point) override { return nullptr; }
 
 private:
+    BarContext m_context;
     TitleBar &m_titleBar;
     ControlBar &m_controlBar;
 };
@@ -146,9 +149,9 @@ private:
 
 } // namespace
 
-ThemePage::ThemePage(Theme &theme, SettingsStore &settings, Player &player)
+ThemePage::ThemePage(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands)
 {
-    m_preview = &add<PlayerPreview>(player);
+    m_preview = &add<PlayerPreview>(settings, player, commands);
     m_heading = &add<Label>(L"Select your preferred theme and color.", headingStyle, &Palette::fgA1);
     m_tiles = {&add<ThemeTile>(theme, settings, ThemeMode::Light, L"Light"),
                &add<ThemeTile>(theme, settings, ThemeMode::Dark, L"Dark"),

@@ -51,7 +51,9 @@ void runPlayer(std::wstring media)
     GraphicsDevice graphics;
     MainWindow window(graphics, theme, settings, player);
 
-    // Launching with media opens maximized; an empty launch opens at the default size.
+    // Launching with media opens a player: maximized, its bars auto-hiding over the video. An empty
+    // launch opens at the default size with the bars fixed.
+    window.setBarsAutoHide(!media.empty());
     window.show(!media.empty());
     if (!media.empty())
         player.open(media);

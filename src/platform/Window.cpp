@@ -29,6 +29,11 @@ int frameThicknessForDpi(UINT dpi)
     return GetSystemMetricsForDpi(SM_CXFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 }
 
+bool isCaptionButton(WPARAM hit)
+{
+    return hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE;
+}
+
 } // namespace
 
 Window::Window(GraphicsDevice &graphics, Theme &theme)
@@ -68,6 +73,8 @@ void Window::create(const std::wstring &title, Size size, Size minimumSize, Wind
     const LONG top = work.top + (work.bottom - work.top - height) / 2;
     const DWORD style = (resizable ? WS_OVERLAPPEDWINDOW : WS_POPUP | WS_CAPTION | WS_SYSMENU) | WS_CLIPCHILDREN;
     createWindow(title, style, 0, {left, top, left + width, top + height}, owner);
+    if (resizable)
+        measureCaptionButtons();
 
     m_modal = frame == WindowFrame::Fixed && owner;
     if (m_modal)
@@ -123,31 +130,12 @@ void Window::setRoot(std::unique_ptr<View> root)
     layoutRoot();
 }
 
-void Window::setNativeCaption(Color Palette::*background)
-{
-    m_nativeCaption = true;
-    m_captionBackground = background;
-    measureCaptionButtons();
-    applyFrameTheme();
-    layoutRoot();
-}
-
-Rect Window::captionButtonBounds() const
-{
-    if (!m_nativeCaption || m_fullScreen)
-        return {};
-    // Flush with the window's top right corner, which lies off screen when maximized.
-    RECT client{};
-    GetClientRect(m_hwnd, &client);
-    const float width = m_captionButtons.cx / scale();
-    return {client.right / scale() - width, -contentTop(), width, m_captionButtons.cy / scale()};
-}
-
 void Window::measureCaptionButtons()
 {
     // Windows reports the caption buttons' size only for a shown window, and showing this one early
-    // would spend its open animation, so they are measured on a cloaked stand-in of the same style on
-    // the same monitor (so at the same DPI). Owned, it never gets a taskbar button.
+    // would spend its open animation, so they are measured on cloaked stand-ins of the same style on
+    // the same monitor (so at the same DPI), one restored and one maximized. Owned, they never get a
+    // taskbar button; shown without activation, they never take the focus.
     static const ATOM standInClass = [] {
         WNDCLASSEXW description{sizeof(description)};
         description.lpfnWndProc = DefWindowProcW;
@@ -157,30 +145,46 @@ void Window::measureCaptionButtons()
     }();
     RECT window{};
     GetWindowRect(m_hwnd, &window);
-    const HWND standIn = CreateWindowExW(0, MAKEINTATOM(standInClass), L"", WS_OVERLAPPEDWINDOW, window.left, window.top,
-                                         400, 300, m_hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
-    const BOOL cloaked = TRUE;
-    DwmSetWindowAttribute(standIn, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
-    ShowWindow(standIn, SW_SHOWNA);
-    RECT buttons{};
-    DwmGetWindowAttribute(standIn, DWMWA_CAPTION_BUTTON_BOUNDS, &buttons, sizeof(buttons));
-    DestroyWindow(standIn);
-    m_captionButtons = {buttons.right - buttons.left, buttons.bottom};
+    const auto measure = [&](DWORD state) {
+        const HWND standIn = CreateWindowExW(0, MAKEINTATOM(standInClass), L"", WS_OVERLAPPEDWINDOW | state, window.left,
+                                             window.top, 400, 300, m_hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+        const BOOL cloaked = TRUE;
+        DwmSetWindowAttribute(standIn, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
+        ShowWindow(standIn, SW_SHOWNA);
+        RECT buttons{};
+        DwmGetWindowAttribute(standIn, DWMWA_CAPTION_BUTTON_BOUNDS, &buttons, sizeof(buttons));
+        DestroyWindow(standIn);
+        return buttons;
+    };
+    const RECT restored = measure(0);
+    m_captionButtons = {restored.right - restored.left, restored.bottom};
+    m_maximizedCaptionBottom = measure(WS_MAXIMIZE).bottom;
 }
 
-float Window::captionHeight() const
+Size Window::captionButtonSize() const
 {
-    // The caption buttons' height, from their top edge, which lies off screen in a maximized window,
-    // so only the part below the monitor edge counts. Without them, the system caption height.
-    const Rect buttons = captionButtonBounds();
-    if (buttons.height > 0)
-        return buttons.bottom();
-    return GetSystemMetricsForDpi(SM_CYCAPTION, static_cast<UINT>(m_dpi)) / scale();
+    const float s = scale();
+    // Unmeasured (a window without a title bar of its own, drawing a picture of one): Windows' sizes.
+    if (m_captionButtons.cx == 0)
+        return {46, GetSystemMetricsForDpi(SM_CYCAPTION, static_cast<UINT>(m_dpi)) / s};
+    const float width = m_captionButtons.cx / 3.0f / s;
+    // A maximized window's top edge lies off screen, so only the part below the monitor edge counts.
+    if (isMaximized() && m_maximizedCaptionBottom > 0)
+        return {width, m_maximizedCaptionBottom / s - contentTop()};
+    return {width, m_captionButtons.cy / s};
 }
 
 bool Window::isMaximized() const
 {
     return !m_fullScreen && IsZoomed(m_hwnd);
+}
+
+void Window::hidePointer()
+{
+    if (m_pointerHidden || !m_pointer)
+        return;
+    m_pointerHidden = true;
+    SetCursor(nullptr);
 }
 
 void Window::show(bool maximized)
@@ -288,18 +292,6 @@ LRESULT CALLBACK Window::windowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 
 LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    // A click on the frame or title bar dismisses popups as a click on the content does.
-    if (message == WM_NCLBUTTONDOWN || message == WM_NCRBUTTONDOWN) {
-        closePopup();
-        m_overlay->closePopovers();
-    }
-    // Windows runs its caption buttons itself: hover, press, Snap Layouts. Hit testing asks it in order.
-    if (m_nativeCaption && message != WM_NCHITTEST) {
-        LRESULT result = 0;
-        if (DwmDefWindowProc(m_hwnd, message, wParam, lParam, &result))
-            return result;
-    }
-
     switch (message) {
     case WM_NCCALCSIZE: {
         if (m_frame != WindowFrame::Resizable)
@@ -308,26 +300,63 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         const LONG top = client.top;
         DefWindowProcW(m_hwnd, message, wParam, lParam);
         // Keeps the standard resize borders on the sides and bottom, but no title bar: the views draw
-        // it. The client area keeps the window's top edge even when maximized, where that edge lies off
-        // screen, because Windows' caption buttons only respond in a client area that starts there; the
+        // it. The client area keeps the window's top edge even when maximized, where that edge lies
+        // off screen, so the caption buttons reach the monitor's top edge as Windows' own do; the
         // content starts below the off-screen part instead (contentTop).
         client.top = top;
         return 0;
     }
     case WM_NCHITTEST:
         return hitTest(lParam);
+    case WM_NCMOUSEMOVE:
+        // Over the title bar, its buttons and the resize borders, Windows reports the pointer as over
+        // the frame; it's still over the window.
+        if (!m_trackingNonClientMouse) {
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE | TME_NONCLIENT, m_hwnd, 0};
+            TrackMouseEvent(&track);
+            m_trackingNonClientMouse = true;
+        }
+        pointerMoved(screenToDips(lParam));
+        // Windows still sees the move, which is what opens Snap Layouts over the maximize button.
+        break;
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+    case WM_NCLBUTTONUP:
+        if (captionButtonMessage(message, wParam, lParam))
+            return 0;
+        // A click on the frame or title bar dismisses popups as a click on the content does.
+        if (message == WM_NCLBUTTONDOWN) {
+            closePopup();
+            m_overlay->closePopovers();
+        }
+        break;
+    case WM_NCMOUSELEAVE:
+        m_trackingNonClientMouse = false;
+        if (GetCapture() != m_hwnd)
+            pointerLeft();
+        return 0;
+    case WM_NCRBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+        closePopup();
+        m_overlay->closePopovers();
+        break;
+    case WM_CONTEXTMENU: {
+        // Over the content only: the title bar's right click is Windows' system menu.
+        if (lParam != -1 && hitTest(lParam) != HTCLIENT)
+            break;
+        RECT client{};
+        GetClientRect(m_hwnd, &client);
+        // From the keyboard (the menu key, Shift+F10), at the window's centre.
+        contextMenuRequested(lParam == -1 ? toDips({client.right / 2, client.bottom / 2}) : screenToDips(lParam));
+        return 0;
+    }
     case WM_MOUSEACTIVATE:
         if (m_frame == WindowFrame::Popup)
             return MA_NOACTIVATE;
         break;
     case WM_SETCURSOR:
         if (LOWORD(lParam) == HTCLIENT) {
-            POINT cursor{};
-            GetCursorPos(&cursor);
-            ScreenToClient(m_hwnd, &cursor);
-            const View *view = viewAt(toDips(cursor));
-            const Cursor shape = view ? view->cursor() : Cursor::Arrow;
-            SetCursor(LoadCursorW(nullptr, shape == Cursor::Hand ? IDC_HAND : shape == Cursor::Text ? IDC_IBEAM : IDC_ARROW));
+            applyCursor();
             return TRUE;
         }
         break;
@@ -343,7 +372,7 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         m_trackingMouse = false;
         // A press keeps the mouse captured, and with it the hover.
         if (GetCapture() != m_hwnd)
-            setHovered(nullptr);
+            pointerLeft();
         return 0;
     case WM_LBUTTONDOWN:
         SetCapture(m_hwnd);
@@ -357,12 +386,9 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         if (reinterpret_cast<HWND>(lParam) != m_hwnd)
             cancelPress();
         return 0;
-    case WM_MOUSEWHEEL: {
-        POINT client{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        ScreenToClient(m_hwnd, &client);
-        wheelScrolled(toDips(client), static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA);
+    case WM_MOUSEWHEEL:
+        wheelScrolled(screenToDips(lParam), static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA);
         return 0;
-    }
     case WM_NCACTIVATE:
         m_active = wParam != FALSE;
         invalidate();
@@ -396,8 +422,7 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_ERASEBKGND: {
         // The window's GDI surface lies under the views (and holds libVLC's video windows). It starts
-        // out white; black is transparent over the native caption, so Windows' caption shows where the
-        // views are clear. Erasing happens as the window is shown, before its first frame is on screen.
+        // out white; it's filled black, as the video's background, before the first frame is on screen.
         RECT client{};
         GetClientRect(m_hwnd, &client);
         FillRect(reinterpret_cast<HDC>(wParam), &client, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
@@ -410,7 +435,7 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
         SetWindowPos(m_hwnd, nullptr, suggested->left, suggested->top, suggested->right - suggested->left,
                      suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
-        if (m_nativeCaption)
+        if (m_frame == WindowFrame::Resizable)
             measureCaptionButtons();
         layoutRoot();
         invalidate();
@@ -447,8 +472,10 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         closeRequested();
         return 0;
     case WM_DESTROY:
-        if (m_owner && m_owner->m_popup == this)
+        if (m_owner && m_owner->m_popup == this) {
             m_owner->m_popup = nullptr;
+            m_owner->pointerChanged();
+        }
         // The surface draws into this window only; its GPU memory goes with it.
         m_surface.reset();
         destroyed();
@@ -458,6 +485,25 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     return DefWindowProcW(m_hwnd, message, wParam, lParam);
+}
+
+bool Window::captionButtonMessage(UINT message, WPARAM hit, LPARAM screenPoint)
+{
+    if (!isCaptionButton(hit))
+        return false;
+    const Point point = screenToDips(screenPoint);
+    switch (message) {
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+        // Pressed like any view, so Windows never draws its classic buttons; the release arrives as
+        // a client message, since the press captures the mouse.
+        SetCapture(m_hwnd);
+        pointerPressed(point);
+        return true;
+    default:
+        pointerReleased(point);
+        return true;
+    }
 }
 
 LRESULT Window::hitTest(LPARAM screenPoint)
@@ -471,10 +517,6 @@ LRESULT Window::hitTest(LPARAM screenPoint)
 
     POINT client{GET_X_LPARAM(screenPoint), GET_Y_LPARAM(screenPoint)};
     ScreenToClient(m_hwnd, &client);
-    // The caption buttons come first, so they reach the window's top edge as native ones do.
-    LRESULT buttonHit = HTNOWHERE;
-    if (m_nativeCaption && DwmDefWindowProc(m_hwnd, WM_NCHITTEST, 0, screenPoint, &buttonHit))
-        return buttonHit;
     // There's no frame above the content, so the top resize border lies inside it.
     if (m_frame == WindowFrame::Resizable && !isMaximized() && client.y < frameThickness())
         return HTTOP;
@@ -485,6 +527,12 @@ LRESULT Window::hitTest(LPARAM screenPoint)
         return HTCAPTION;
     case HitRole::SystemMenu:
         return HTSYSMENU;
+    case HitRole::Minimize:
+        return HTMINBUTTON;
+    case HitRole::Maximize:
+        return HTMAXBUTTON;
+    case HitRole::Close:
+        return HTCLOSE;
     case HitRole::Client:
         break;
     }
@@ -494,6 +542,13 @@ LRESULT Window::hitTest(LPARAM screenPoint)
 Point Window::toDips(POINT clientPoint) const
 {
     return {clientPoint.x / scale(), clientPoint.y / scale()};
+}
+
+Point Window::screenToDips(LPARAM screenPoint) const
+{
+    POINT client{GET_X_LPARAM(screenPoint), GET_Y_LPARAM(screenPoint)};
+    ScreenToClient(m_hwnd, &client);
+    return toDips(client);
 }
 
 float Window::contentTop() const
@@ -541,12 +596,8 @@ void Window::applyFrameShape()
 
 void Window::updateFrameMargins()
 {
-    // The native caption is DWM frame extended under the title bar: Windows paints it in the caption
-    // colour and draws its buttons there, behind the views. Without one, a sliver of frame keeps the
-    // shadow; a popup has none.
-    int top = m_frame == WindowFrame::Popup ? 0 : 1;
-    if (m_nativeCaption)
-        top = m_fullScreen ? 0 : static_cast<int>(std::lround((contentTop() + captionHeight()) * scale()));
+    // A sliver of DWM frame keeps the window's shadow; a popup draws its own, and full screen has none.
+    const int top = m_frame == WindowFrame::Popup || m_fullScreen ? 0 : 1;
     if (top == m_frameMarginTop)
         return;
     m_frameMarginTop = top;
@@ -556,14 +607,9 @@ void Window::updateFrameMargins()
 
 void Window::applyFrameTheme()
 {
-    // The window border, caption buttons and system menu follow the app theme.
+    // The window border and system menu follow the app theme.
     const BOOL dark = m_theme.isDark();
     DwmSetWindowAttribute(m_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-    if (m_captionBackground) {
-        const Color color = m_theme.palette().*m_captionBackground;
-        const COLORREF caption = RGB(std::lround(color.r * 255), std::lround(color.g * 255), std::lround(color.b * 255));
-        DwmSetWindowAttribute(m_hwnd, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
-    }
 }
 
 void Window::layoutRoot()
@@ -607,19 +653,62 @@ bool Window::handleKey(KeyChord chord)
 
 void Window::pointerMoved(Point point)
 {
+    // Windows repeats moves without movement (after a cursor change, for one); only real ones show
+    // a hidden pointer again.
+    const bool moved = !m_pointer || m_pointer->x != point.x || m_pointer->y != point.y;
+    m_pointer = point;
+    if (moved && m_pointerHidden) {
+        m_pointerHidden = false;
+        applyCursor();
+    }
     View *target = viewAt(point);
     // While a view is pressed, only it can be hovered.
     setHovered(m_pressed && target != m_pressed ? nullptr : target);
     if (m_pressed)
         m_pressed->mouseDragged(m_pressed->mapFromWindow(point));
+    if (moved)
+        pointerChanged();
+}
+
+void Window::applyCursor()
+{
+    if (m_pointerHidden) {
+        SetCursor(nullptr);
+        return;
+    }
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    ScreenToClient(m_hwnd, &cursor);
+    const View *view = viewAt(toDips(cursor));
+    const Cursor shape = view ? view->cursor() : Cursor::Arrow;
+    SetCursor(LoadCursorW(nullptr, shape == Cursor::Hand ? IDC_HAND : shape == Cursor::Text ? IDC_IBEAM : IDC_ARROW));
+}
+
+void Window::pointerLeft()
+{
+    setHovered(nullptr);
+    // Moving between the content and the frame (the title bar, the resize borders) leaves one and
+    // enters the other: the pointer has left only when the window under it is another one.
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    if (GetAncestor(WindowFromPoint(cursor), GA_ROOT) == m_hwnd) {
+        ScreenToClient(m_hwnd, &cursor);
+        m_pointer = toDips(cursor);
+    } else {
+        m_pointer.reset();
+    }
+    pointerChanged();
 }
 
 void Window::pointerPressed(Point point)
 {
     m_overlay->hideTooltip();
+    // A click outside an open popup only closes it, except in a menu, where clicking another item
+    // closes the submenu and picks that item.
     if (m_popup) {
         closePopup();
-        return;
+        if (m_frame != WindowFrame::Popup)
+            return;
     }
     View *target = viewAt(point);
     if (m_overlay->closePopoversOutside(target))
@@ -644,6 +733,7 @@ void Window::pointerReleased(Point point)
     released->mouseReleased(local, released->bounds().contains(local));
     // The release may have removed views (closing a popover), so the target is found again.
     pointerMoved(point);
+    pointerChanged();
     invalidate();
 }
 
@@ -685,6 +775,7 @@ void Window::cancelPress()
     if (!m_pressed)
         return;
     std::exchange(m_pressed, nullptr)->m_pressed = false;
+    pointerChanged();
     invalidate();
 }
 
@@ -692,14 +783,15 @@ void Window::setHovered(View *view)
 {
     if (view == m_hovered)
         return;
-    if (m_hovered) {
-        m_hovered->m_hovered = false;
-        m_hovered->m_hover.animateTo(0, hoverFade);
+    if (View *previous = std::exchange(m_hovered, view)) {
+        previous->m_hovered = false;
+        previous->m_hover.animateTo(0, hoverFade);
+        previous->hoverChanged();
     }
-    m_hovered = view;
     if (view) {
         view->m_hovered = true;
         view->m_hover.animateTo(1, hoverFade);
+        view->hoverChanged();
     }
     m_overlay->hoverChanged(view);
     invalidate();
