@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Sona VERSION 0.1.0 LANGUAGES CXX RC)
+project(Sona VERSION 0.1.0 LANGUAGES C CXX RC)
 
 # App identity, shared by the executable and the Windows installer.
 set(SONA_APP_NAME "Sona")
@@ -23,4 +23,5 @@ set_target_properties(libvlc PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${LIBVLC_DIR}/include"
 )
 
+add_subdirectory(third_party/sqlite)
 add_subdirectory(src)
