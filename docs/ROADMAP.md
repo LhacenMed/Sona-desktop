@@ -104,7 +104,7 @@ Setup.
 | --- | --- | --- |
 | Window | Title bar drawn as views with minimize/maximize/close at Windows' size acting as Windows' own (Snap Layouts, animations), stand-in measurement of the button size, maximized/fullscreen handling, DPI, open animation, no white flash | `platform/Window`, `widgets/WindowButtons`, `CaptionButton` |
 | Rendering | One shared D3D11/D2D/DComp device, per-window swap chains drawn above the libVLC child window, SVG icons with colour swaps, Inter from resources | `graphics/` |
-| Toolkit | `View` (tree, hit testing, hover/press, focus, keys, wheel, tooltips), `Row`/`Column` (padding, alignment), `ScrollView`, overlay layer with popovers and tooltips, popup windows, `Animation` and `Timer`, `Label`, `Icon` (mono and two-tone), `IconButton`/`IconWrapper`, `Button` (primary, secondary, neutral), `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField` (selection, clipboard, undo, IME), `DialogWindow` (modal, owned) | `widgets/`, `platform/` |
+| Toolkit | `View` (tree, hit testing, hover/press, focus, keys, wheel, tooltips), `Row`/`Column` (padding, alignment), `ScrollView`, overlay layer with tooltips, frosted popup windows (menus, lists, panels) opening with VS Code's motion, `Animation` and `Timer`, `Label`, `Icon` (mono and two-tone), `IconButton`/`IconWrapper`, `Button` (primary, secondary, neutral), `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField` (selection, clipboard, undo, IME), `DialogWindow` (modal, owned) | `widgets/`, `platform/` |
 | Commands | Registry of every action and its shortcuts; keyboard handling and the onboarding guide read it (keys decided in D3) | `commands/`, `maininterface/MainCommands` |
 | Widget gallery | Every widget on one page, Debug builds only: `sona.exe --gallery` | `gallery/` |
 | Design tokens | Dark/Light palettes, 9 accent colours, theme mode (Light/Dark/System) | `style/Theme` |
@@ -134,6 +134,12 @@ value field (a `Slider` next to a `TextField`, composed where P5 needs it).
 - The bars sit over the video rather than beside it, so showing and hiding them never resizes the
   video.
 - The right-click menu's submenus aren't drawn in Figma; each holds the existing commands of its kind.
+- Popups (menus, submenus, dropdown lists and panels) are frosted with VS Code's material rather than
+  Figma's background blur 50: the window behind them is captured (Windows.Graphics.Capture) and
+  blurred at full resolution (blur 12) under their Figma color at 92%. Dropdown lists are frosted too
+  (opaque in Figma). They open with VS Code's menu motion, faster: fading in while growing from 97%
+  over 167 ms (ease-out quint) out of the corner nearest what they open from. Before Windows 11
+  they're opaque.
 - The right-click menu shows Record as Shift+R (decision D3), not R.
 - "VLC" becomes "Sona" (title, menu items, onboarding text).
 - The onboarding welcome text is shortened, and the logo is Sona's.
@@ -200,7 +206,7 @@ Each one is one widget in `widgets/`, built once and reused everywhere. Figma id
 | `ColorField` | Subtitle colours | Hex text + swatch; opens the Windows colour picker. |
 | `Tabs` | Panel tab strips | Icon + label tabs; the active one is accent-coloured with an underline. |
 | `ListRow`, `ListView` | Library rows, queue rows, tracks | Icon/number/thumbnail, text, trailing text, hover, selected and current. `ListView`: click selects, double click activates, Delete removes, drag reorders. |
-| `Popover` | Control-bar panels | Floating panel in the window's overlay layer with a shadow. |
+| Panels | Control-bar panels | A `PopupWindow` docked over the video (`PopupPlacement::Docked`), frosted. |
 | `Menu` | `menu 6062:13354`, `right-click menu 6065:13616`, context menus | Top-level popup window: two-tone icon, label, shortcut, chevron submenus, dividers, keyboard navigation. |
 | `DialogFrame` | Settings, shortcuts, subtitles, network, playlist | 1048 wide; title + ✕, content, footer with Cancel/Save (Save is accent-coloured when enabled). |
 | `InfoIcon` | Settings rows | ⓘ with a tooltip showing the option's explanation. |
@@ -291,8 +297,8 @@ Height 54. Left to right:
 
 ### 5.3 Control-bar panels
 
-These are popovers anchored above the control bar's right side, about 400 wide, in the window's
-overlay layer. Esc or a click outside closes them.
+These are frosted popup windows docked above the control bar's right side, about 400 wide
+(`PopupPlacement::Docked`). Esc or a click outside closes them.
 
 **Tracks popover.** Tabs: Video · Audio · Subtitles.
 

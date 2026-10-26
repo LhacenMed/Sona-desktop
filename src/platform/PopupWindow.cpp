@@ -5,20 +5,31 @@
 #include <algorithm>
 #include <cmath>
 
+#include "graphics/BackdropCapture.h"
 #include "graphics/Canvas.h"
 #include "style/Surface.h"
+#include "widgets/Animation.h"
 #include "widgets/View.h"
 
 namespace {
 
-// The surface with its shadow, around the content, in a window with room for the shadow.
+// VS Code's menu motion: the popup fades in while growing from 97% out of the corner nearest what it
+// opened from, at Windows' fast pace.
+constexpr float openingScale = 0.97f;
+constexpr std::chrono::milliseconds openingDuration{167};
+
+// The surface, shadow and frosted backdrop included, with the content on it, in a window with room
+// for the shadow; all of it opens with the menu motion.
 class PopupFrame : public View
 {
 public:
-    PopupFrame(const Surface &surface, std::unique_ptr<View> content)
+    PopupFrame(const Surface &surface, std::unique_ptr<View> content, bool opensRightward, bool opensDownward)
         : m_surface(surface)
         , m_content(add(std::move(content)))
+        , m_opensRightward(opensRightward)
+        , m_opensDownward(opensDownward)
     {
+        m_opening.animateTo(1, openingDuration, Easing::OutQuint);
     }
 
     void layout() override
@@ -27,15 +38,37 @@ public:
         m_content.setFrame({margin, margin, frame().width - 2 * margin, frame().height - 2 * margin});
     }
 
-    void paint(Canvas &canvas) override
+    void paintTree(Canvas &canvas) override
     {
-        canvas.clear(bounds(), Color{});
-        canvas.fillSurface(m_content.frame(), m_surface);
+        const float opened = m_opening.value(*this);
+        const Rect &surface = m_content.frame();
+        const Point origin{frame().x + (m_opensRightward ? surface.x : surface.right()),
+                           frame().y + (m_opensDownward ? surface.y : surface.bottom())};
+        canvas.clear(frame(), Color{});
+        canvas.save();
+        canvas.translate(origin.x, origin.y);
+        canvas.scale(openingScale + (1 - openingScale) * opened);
+        canvas.translate(-origin.x, -origin.y);
+        canvas.pushOpacity(opened);
+        canvas.save();
+        canvas.translate(frame().x, frame().y);
+        const std::optional<Backdrop> behind = static_cast<const PopupWindow *>(window())->backdrop();
+        canvas.fillSurface(surface, m_surface, behind ? &*behind : nullptr);
+        // The content stays within the surface's rounded corners (a panel's tab strip, for one).
+        canvas.pushRoundedClip(surface, m_surface.radius);
+        canvas.restore();
+        View::paintTree(canvas);
+        canvas.popRoundedClip();
+        canvas.popOpacity();
+        canvas.restore();
     }
 
 private:
     const Surface &m_surface;
     View &m_content;
+    bool m_opensRightward;
+    bool m_opensDownward;
+    Animation m_opening;
 };
 
 // Where a popup starts along one axis: at `start`, or at `fallback` when it would leave the screen
@@ -49,9 +82,11 @@ LONG place(LONG start, LONG fallback, LONG length, LONG screenStart, LONG screen
 } // namespace
 
 PopupWindow::PopupWindow(Window &owner, Rect anchor, PopupPlacement placement, const Surface &surface,
-                         std::unique_ptr<View> content)
+                         std::unique_ptr<View> content, PopupKeys keys)
     : Window(owner.graphics(), owner.theme())
     , m_content(content.get())
+    , m_keys(keys)
+    , m_backdropCapture(owner.rootWindow().backdropCapture())
 {
     owner.closePopup();
 
@@ -64,24 +99,45 @@ PopupWindow::PopupWindow(Window &owner, Rect anchor, PopupPlacement placement, c
     UINT unusedDpiY = dpi;
     GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &unusedDpiY);
     const float s = static_cast<float>(dpi) / USER_DEFAULT_SCREEN_DPI;
+    const bool docked = placement == PopupPlacement::Docked;
     const Size size = m_content->preferredSize();
-    const LONG width = std::lround(size.width * s);
-    const LONG height = std::lround(size.height * s);
+    const LONG width = docked ? target.right - target.left : std::lround(size.width * s);
+    const LONG height = docked ? target.bottom - target.top : std::lround(size.height * s);
 
-    const RECT &work = monitorInfo.rcWork;
-    const bool beside = placement == PopupPlacement::Beside;
-    const bool below = placement == PopupPlacement::Below;
-    const LONG left = place(beside ? target.right : target.left, beside ? target.left - width : target.right - width, width,
-                            work.left, work.right);
-    const LONG top = place(below ? target.bottom : target.top, below ? target.top - height : target.bottom - height, height,
-                           work.top, work.bottom);
+    LONG left = target.left;
+    LONG top = target.top;
+    if (!docked) {
+        const RECT &work = monitorInfo.rcWork;
+        const bool beside = placement == PopupPlacement::Beside;
+        const bool below = placement == PopupPlacement::Below;
+        left = place(beside ? target.right : target.left, beside ? target.left - width : target.right - width, width, work.left,
+                     work.right);
+        top = place(below ? target.bottom : target.top, below ? target.top - height : target.bottom - height, height, work.top,
+                    work.bottom);
+    }
 
     // The window reaches past the surface by its shadow.
     const LONG margin = std::lround(surface.shadowReach() * s);
     createPopup(owner.hwnd(), {left - margin, top - margin, left + width + margin, top + height + margin});
-    setRoot(std::make_unique<PopupFrame>(surface, std::move(content)));
+    // It grows away from what it opened from: rightward when it's right of it, downward when below; a
+    // docked panel out of its bottom-right corner.
+    setRoot(std::make_unique<PopupFrame>(surface, std::move(content), !docked && left + width / 2 >= (target.left + target.right) / 2,
+                                         !docked && top + height / 2 >= (target.top + target.bottom) / 2));
+    m_backdropCapture.setLive(true);
+    m_backdropChanged = m_backdropCapture.changed.connect([this] { invalidate(); });
     owner.m_popup = this;
     show(false);
+}
+
+std::optional<Backdrop> PopupWindow::backdrop() const
+{
+    ID3D11Texture2D *image = m_backdropCapture.image();
+    if (!image)
+        return {};
+    POINT client{};
+    ClientToScreen(hwnd(), &client);
+    const POINT origin = m_backdropCapture.origin();
+    return Backdrop{image, {(origin.x - client.x) / scale(), (origin.y - client.y) / scale()}};
 }
 
 void PopupWindow::closeChain()
@@ -97,7 +153,7 @@ bool PopupWindow::keyPressed(KeyChord chord)
 {
     if (chord.key == VK_ESCAPE)
         close();
-    else
-        m_content->keyPressed(chord);
+    else if (!m_content->keyPressed(chord) && m_keys == PopupKeys::Passed)
+        return rootWindow().keyPressed(chord);
     return true;
 }

@@ -100,7 +100,8 @@ public:
             .setActiveWhen([&queue] { return queue.shuffles(); });
         m_header->addAction(L"remove", L"Remove", [this, &queue] { queue.remove(m_list->list().selected()); });
         m_header->addAction(L"add", L"Add Files", [this, &queue, &settings] {
-            chooseFiles(*window(), settings.get(AppSettings::mediaFolder), mediaFileType(),
+            // Over the player: the panel closes as the dialog takes the activation.
+            chooseFiles(window()->rootWindow(), settings.get(AppSettings::mediaFolder), mediaFileType(),
                         [&queue](std::vector<std::wstring> files) { queue.append(files); });
         });
 
@@ -223,7 +224,7 @@ private:
 } // namespace
 
 QueuePanel::QueuePanel(const BarContext &context, Queue &queue)
-    : Popover(1)
+    : Column(1)
 {
     auto &tabs = add<Tabs>(std::vector<Tab>{{L"queue", L"Queue"}, {L"bookmarks", L"Bookmarks"}, {L"chapters", L"Chapters"}}, 0);
     tabs.setFillsWidth(true);

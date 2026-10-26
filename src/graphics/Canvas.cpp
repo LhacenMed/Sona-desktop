@@ -42,6 +42,10 @@ void Canvas::bind(ID2D1DeviceContext5 *context)
     check(context->CreateSolidColorBrush(D2D1::ColorF(0, 0), &m_brush));
     m_recorder.Reset();
     check(m_graphics.d2d()->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_recorder));
+    m_backdropImage = nullptr;
+    m_backdropBitmap.Reset();
+    m_backdropCrop.Reset();
+    m_backdropBlur.Reset();
 }
 
 void Canvas::beginFrame()
@@ -88,6 +92,20 @@ void Canvas::scale(float factor)
 void Canvas::pushClip(const Rect &rect)
 {
     m_context->PushAxisAlignedClip(toD2D(rect), D2D1_ANTIALIAS_MODE_ALIASED);
+}
+
+void Canvas::pushRoundedClip(const Rect &rect, float radius)
+{
+    ComPtr<ID2D1Factory> factory;
+    m_graphics.d2d()->GetFactory(&factory);
+    ComPtr<ID2D1RoundedRectangleGeometry> shape;
+    check(factory->CreateRoundedRectangleGeometry(D2D1::RoundedRect(toD2D(rect), radius, radius), &shape));
+    m_context->PushLayer(D2D1::LayerParameters1(D2D1::InfiniteRect(), shape.Get()), nullptr);
+}
+
+void Canvas::popRoundedClip()
+{
+    m_context->PopLayer();
 }
 
 void Canvas::popClip()
@@ -176,11 +194,61 @@ void Canvas::drawShadow(const Rect &rect, float radius, Point offset, float blur
     m_context->DrawImage(shadow.Get(), D2D1::Point2F(offset.x, offset.y));
 }
 
-void Canvas::fillSurface(const Rect &rect, const Surface &surface)
+void Canvas::fillSurface(const Rect &rect, const Surface &surface, const Backdrop *behind)
 {
     if (surface.shadowOpacity > 0)
         drawShadow(rect, surface.radius, surface.shadowOffset, surface.shadowBlur, Color::hex(0x000000, surface.shadowOpacity));
-    fillRoundedRect(rect, surface.radius, palette().*surface.fill);
+    const Color fill = palette().*surface.fill;
+    if (surface.backdropBlur == 0) {
+        fillRoundedRect(rect, surface.radius, fill);
+        return;
+    }
+
+    pushRoundedClip(rect, surface.radius);
+    m_context->FillRectangle(toD2D(rect), brush({fill.r, fill.g, fill.b, 1}));
+    if (behind && behind->image)
+        drawBlurred(*behind, rect, surface.backdropBlur);
+    m_context->FillRectangle(toD2D(rect), brush(fill));
+    popRoundedClip();
+}
+
+void Canvas::drawBlurred(const Backdrop &behind, const Rect &rect, float deviation)
+{
+    if (!m_backdropBlur) {
+        check(m_context->CreateEffect(CLSID_D2D1Crop, &m_backdropCrop));
+        check(m_context->CreateEffect(CLSID_D2D1GaussianBlur, &m_backdropBlur));
+        m_backdropBlur->SetInputEffect(0, m_backdropCrop.Get());
+        check(m_backdropBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, D2D1_GAUSSIANBLUR_OPTIMIZATION_QUALITY));
+        check(m_backdropBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD));
+    }
+    // One image pixel to a screen pixel: the image is as the window is shown, at its DPI.
+    float dpiX = 0;
+    float dpiY = 0;
+    m_context->GetDpi(&dpiX, &dpiY);
+    float bitmapDpiX = 0;
+    float bitmapDpiY = 0;
+    if (m_backdropBitmap)
+        m_backdropBitmap->GetDpi(&bitmapDpiX, &bitmapDpiY);
+    if (behind.image != m_backdropImage || bitmapDpiX != dpiX) {
+        ComPtr<IDXGISurface> surface;
+        check(behind.image->QueryInterface(IID_PPV_ARGS(&surface)));
+        m_backdropBitmap.Reset();
+        check(m_context->CreateBitmapFromDxgiSurface(
+            surface.Get(),
+            D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_NONE, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), dpiX,
+                                    dpiY),
+            &m_backdropBitmap));
+        m_backdropImage = behind.image;
+        m_backdropCrop->SetInput(0, m_backdropBitmap.Get());
+    }
+
+    // Only what's under the surface and within the blur's reach, in the image's DIPs.
+    const float reach = 3 * deviation;
+    check(m_backdropCrop->SetValue(D2D1_CROP_PROP_RECT, D2D1::Vector4F(rect.x - reach - behind.origin.x, rect.y - reach - behind.origin.y,
+                                                                      rect.right() + reach - behind.origin.x,
+                                                                      rect.bottom() + reach - behind.origin.y)));
+    check(m_backdropBlur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, deviation));
+    m_context->DrawImage(m_backdropBlur.Get(), D2D1::Point2F(behind.origin.x, behind.origin.y));
 }
 
 void Canvas::drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color)

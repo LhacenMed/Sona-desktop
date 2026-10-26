@@ -3,14 +3,14 @@
 #include <algorithm>
 
 #include "graphics/Canvas.h"
-#include "platform/Window.h"
+#include "platform/PopupWindow.h"
 #include "playback/Player.h"
 #include "player/ControlBar.h"
 #include "player/QueuePanel.h"
 #include "player/TitleBar.h"
 #include "player/VideoView.h"
+#include "style/Surface.h"
 #include "style/Theme.h"
-#include "widgets/Overlay.h"
 
 namespace {
 
@@ -65,15 +65,16 @@ void PlayerView::pointerChanged()
 bool PlayerView::isQueueOpen() const
 {
     const Window *host = window();
-    return host && host->overlay().popover<QueuePanel>();
+    const auto *popup = host ? dynamic_cast<const PopupWindow *>(host->popup()) : nullptr;
+    return popup && dynamic_cast<const QueuePanel *>(&popup->content());
 }
 
 void PlayerView::toggleQueue()
 {
-    Overlay &overlay = window()->overlay();
+    Window &host = *window();
     const bool wasOpen = isQueueOpen();
-    // Opening one panel closes any other.
-    overlay.closePopovers();
+    // Opening one panel closes any other popup.
+    host.closePopup();
     if (wasOpen)
         return;
     // A panel sits against both bars, so they come in with it and stay while it's open.
@@ -81,14 +82,15 @@ void PlayerView::toggleQueue()
     m_controlsReveal.show();
     const float top = m_titleBar.frame().height + panelMargin;
     const float height = std::max(0.0f, frame().height - controlBarHeight - panelMargin - top);
-    const Rect panel{frame().width - panelMargin - QueuePanel::width, top, QueuePanel::width, height};
-    overlay.openPopover<QueuePanel>(panel, m_context, m_queue);
+    const Rect panel = mapToWindow({frame().width - panelMargin - QueuePanel::width, top, QueuePanel::width, height});
+    host.openWindow<PopupWindow>(host, panel, PopupPlacement::Docked, Surfaces::panel, std::make_unique<QueuePanel>(m_context, m_queue),
+                                 PopupKeys::Passed);
 }
 
 void PlayerView::updateBars()
 {
     Window *host = window();
-    if (!host || host->isPressing() || host->hasPopup() || host->overlay().hasPopovers())
+    if (!host || host->isPressing() || host->hasPopup())
         return;
     if (!m_barsAutoHide || !m_context.player.hasVideo()) {
         m_titleReveal.show();

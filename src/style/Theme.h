@@ -40,7 +40,10 @@ struct Palette
     Color bgAccentDark;
     Color bgA2;
     Color bgA3;
-    Color bgA3Transparent;
+    // The tints of frosted surfaces, over what's behind them blurred: menus and lists (BG/A3), and
+    // panels (BG/B1), at VS Code's frosted glass opacity (92%).
+    Color bgPopup;
+    Color bgPanel;
     Color bgA4;
     Color bgA5;
     Color bgB1;

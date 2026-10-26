@@ -10,6 +10,7 @@
 #include <cwchar>
 #include <utility>
 
+#include "graphics/BackdropCapture.h"
 #include "graphics/WindowSurface.h"
 #include "platform/HResult.h"
 #include "style/Theme.h"
@@ -199,6 +200,10 @@ void Window::show(bool maximized)
         ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
     else
         ShowWindow(m_hwnd, maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
+    // Warm before any popup opens over it, so the first has its backdrop at once; started once it's
+    // shown, which starting would hold up.
+    if (m_frame == WindowFrame::Resizable)
+        runLater([this] { backdropCapture(); });
 }
 
 void Window::toggleFullScreen()
@@ -327,10 +332,8 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         if (captionButtonMessage(message, wParam, lParam))
             return 0;
         // A click on the frame or title bar dismisses popups as a click on the content does.
-        if (message == WM_NCLBUTTONDOWN) {
+        if (message == WM_NCLBUTTONDOWN)
             closePopup();
-            m_overlay->closePopovers();
-        }
         break;
     case WM_NCMOUSELEAVE:
         m_trackingNonClientMouse = false;
@@ -340,7 +343,6 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     case WM_NCRBUTTONDOWN:
     case WM_RBUTTONDOWN:
         closePopup();
-        m_overlay->closePopovers();
         break;
     case WM_CONTEXTMENU: {
         // Over the content only: the title bar's right click is Windows' system menu.
@@ -409,7 +411,6 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_SIZE:
         if (wParam != SIZE_MINIMIZED && m_surface) {
-            m_overlay->closePopovers();
             m_surface->resize();
             layoutRoot();
             render();
@@ -477,6 +478,9 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         if (m_owner && m_owner->m_popup == this) {
             m_owner->m_popup = nullptr;
             m_owner->pointerChanged();
+            // The last popup over the window closed.
+            if (m_owner->m_frame != WindowFrame::Popup && m_owner->m_backdropCapture)
+                m_owner->m_backdropCapture->setLive(false);
         }
         // The surface draws into this window only; its GPU memory goes with it.
         m_surface.reset();
@@ -581,8 +585,6 @@ View *Window::viewAt(Point point) const
     const Point local{point.x - content.x, point.y - content.y};
     if (View *hit = m_overlay->hitTest(local))
         return hit;
-    if (m_overlay->hasPopovers())
-        return nullptr;
     return m_root->hitTest(local);
 }
 
@@ -660,10 +662,6 @@ bool Window::handleKey(KeyChord chord)
         m_popup->handleKey(chord);
         return true;
     }
-    if (chord.key == VK_ESCAPE && m_overlay->hasPopovers()) {
-        m_overlay->closePopovers();
-        return true;
-    }
     if (m_focused && m_focused->keyPressed(chord))
         return true;
     return keyPressed(chord);
@@ -729,8 +727,6 @@ void Window::pointerPressed(Point point)
             return;
     }
     View *target = viewAt(point);
-    if (m_overlay->closePopoversOutside(target))
-        return;
     // The clicked view takes the focus, or the nearest view around it that accepts it (a list, for
     // a click on one of its rows).
     View *focus = target;
@@ -754,7 +750,7 @@ void Window::pointerReleased(Point point)
     released->m_pressed = false;
     const Point local = released->mapFromWindow(point);
     released->mouseReleased(local, released->bounds().contains(local));
-    // The release may have removed views (closing a popover), so the target is found again.
+    // The release may have removed views (a closed list), so the target is found again.
     pointerMoved(point);
     pointerChanged();
     invalidate();
@@ -766,18 +762,14 @@ void Window::wheelScrolled(Point point, float notches)
     if (!m_root)
         return;
     // Any view can scroll, not only those that take clicks: the deepest one under the pointer is
-    // offered the scroll first, then its parents. Content under a popup or popovers doesn't scroll
-    // (viewAt).
+    // offered the scroll first, then its parents. Content under a popup doesn't scroll (viewAt).
     if (isUnderPopup())
         return;
     const Rect &content = m_root->frame();
     const Point local{point.x - content.x, point.y - content.y};
     View *target = deepestViewAt(*m_overlay, local);
-    if (target == m_overlay.get()) {
-        if (m_overlay->hasPopovers())
-            return;
+    if (target == m_overlay.get())
         target = deepestViewAt(*m_root, local);
-    }
     for (View *view = target; view; view = view->parent()) {
         if (view->wheelScrolled(notches)) {
             // Different content is under the pointer now.
@@ -831,6 +823,21 @@ void Window::runLater(std::function<void()> task)
     auto *posted = new std::function<void()>(std::move(task));
     if (!PostMessageW(m_hwnd, laterTaskMessage, 0, reinterpret_cast<LPARAM>(posted)))
         delete posted;
+}
+
+Window &Window::rootWindow()
+{
+    Window *root = this;
+    while (root->m_frame == WindowFrame::Popup)
+        root = root->m_owner;
+    return *root;
+}
+
+BackdropCapture &Window::backdropCapture()
+{
+    if (!m_backdropCapture)
+        m_backdropCapture = std::make_unique<BackdropCapture>(m_graphics, m_hwnd);
+    return *m_backdropCapture;
 }
 
 void Window::closePopup()

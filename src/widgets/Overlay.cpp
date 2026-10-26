@@ -11,7 +11,7 @@
 
 namespace {
 
-// Space between a popover or callout and what it belongs to.
+// Space between a callout and what it belongs to.
 constexpr float gap = 8;
 // Where on-screen messages sit, below the title bar, and how long they stay.
 constexpr float messageTop = 56;
@@ -83,24 +83,6 @@ Overlay::Overlay()
 
 Overlay::~Overlay() = default;
 
-void Overlay::closePopovers()
-{
-    for (View *popover : std::exchange(m_popovers, {}))
-        remove(*popover);
-}
-
-bool Overlay::closePopoversOutside(const View *target)
-{
-    if (m_popovers.empty())
-        return false;
-    for (const View *view = target; view; view = view->parent()) {
-        if (std::ranges::find(m_popovers, view) != m_popovers.end())
-            return false;
-    }
-    closePopovers();
-    return true;
-}
-
 void Overlay::hoverChanged(View *hovered)
 {
     hideTooltip();
@@ -171,17 +153,6 @@ Rect Overlay::boundsOf(const View &view) const
     const Rect inWindow = view.mapToWindow(view.bounds());
     const Point origin = mapFromWindow({inWindow.x, inWindow.y});
     return {origin.x, origin.y, inWindow.width, inWindow.height};
-}
-
-void Overlay::place(View &popover, const View &anchor)
-{
-    const Rect target = boundsOf(anchor);
-    const Size size = popover.preferredSize();
-    float y = target.bottom() + gap;
-    if (y + size.height > frame().height && target.y - gap - size.height >= 0)
-        y = target.y - gap - size.height;
-    const float x = std::clamp(target.x, 0.0f, std::max(0.0f, frame().width - size.width));
-    popover.setFrame({x, y, size.width, size.height});
 }
 
 void Overlay::showTooltip()

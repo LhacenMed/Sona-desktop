@@ -14,12 +14,12 @@ between features:
 | `app/` | `wWinMain`: creates the services below in order and runs the message loop. |
 | `core/` | Platform-free primitives: `Geometry` (DIPs), `Color`, `Signal`/`Subscription`, UTF-8 conversion, `TimeText` (how times are written). |
 | `platform/` | Win32: `Window` (custom frame with native behavior), embedded `Resources`, `FileDialogs`, `KnownFolders`, `SystemTheme`, installer files under `windows/`. |
-| `graphics/` | `GraphicsDevice` (D3D11, D2D, DComp, DWrite with the bundled font), `WindowSurface` (per-window swap chain), `Canvas` (the drawing API). |
-| `style/` | The design system: `Theme` (Figma tokens resolved for theme and accent), `Surface` (the raised surfaces: list, menu, callout, panel), `Typography`. |
+| `graphics/` | `GraphicsDevice` (D3D11, D2D, DComp, DWrite with the bundled font), `WindowSurface` (per-window swap chain), `Canvas` (the drawing API), `BackdropCapture` (a window as Windows composes it, video included, for frosted popups to blur). |
+| `style/` | The design system: `Theme` (Figma tokens resolved for theme and accent), `Surface` (the raised surfaces: menu, list, callout, panel; frosted ones blur what's behind them), `Typography`. |
 | `settings/` | `SettingsStore` (registry) and `AppSettings` (every preference, declared once). |
 | `data/` | `Database` (SQLite, `%LOCALAPPDATA%\Sona\sona.db`, its migrations) and the stores on it: `Bookmarks`. |
 | `commands/` | `CommandRegistry`: every user action (`CommandId`) with its shortcuts and what it runs. |
-| `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (popovers, tooltips), `Popover`, `Menu`, `Label`, `Icon`, `IconButton`, `CaptionButton`, `WindowButtons`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `ListView`, `DialogWindow`, `Animation`. |
+| `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (tooltips, values, messages), `Menu`, `Label`, `Icon`, `IconButton`, `CaptionButton`, `WindowButtons`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `ListView`, `DialogWindow`, `Animation`. |
 | `playback/` | `Player`: the only code that includes libVLC. `Queue`: what plays next, the one place media is opened from. `MediaFiles`: what counts as media and how folders expand. |
 | `player/`, `maininterface/`, `onboarding/` | Feature UI: the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`; `QueuePanel`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
 | `gallery/` | Debug builds only (`sona.exe --gallery`): every widget on one page, for checking against Figma. |
@@ -44,7 +44,7 @@ between features:
 - **Input reaches views through the window.** The mouse goes to the view under it (the `Overlay`
   first), keys to the focused view and then to the window's commands, wheel scrolls up the view
   tree until one scrolls. An open popup (`PopupWindow`, which never takes activation) gets every
-  key; a popup or popover closes on Escape or a click elsewhere, and that click does nothing else.
+  key; a popup closes on Escape or a click elsewhere, and that click does nothing else.
   Until then the content under it takes no part in the mouse (`Window::viewAt`): no hover, pointer
   shape, tooltip or scroll, as behind native menus and flyouts; a menu stays live under its submenu.
   Views are removed with `View::remove`, so the window never keeps a pointer to a dead view.
@@ -54,6 +54,11 @@ between features:
   through `Window::runLater`, once the click or key that asked for it is handled, as a native menu's
   command arrives after the menu has closed; otherwise its loop would free the menu or panel whose
   handler is still running.
+- **Every floating surface is a `PopupWindow`:** menus, lists and panels (`PopupPlacement::Docked`,
+  whose unused keys still reach the player's shortcuts). Each draws its `Surface` itself, frosted with
+  VS Code's material (blur 12, 92% tint) over its owner captured behind it (`BackdropCapture`: kept
+  warm at two frames a second, live while a popup is open, so the blur is there from the first frame),
+  and opens with VS Code's menu motion, the whole popup scaling and fading together.
 - **Windows own their dialogs and popups.** `Window::openWindow` keeps them alive until they close;
   a fixed-size window with an owner is modal.
 - **Animation needs no timer.** An `Animation` read during paint schedules the next frame until it

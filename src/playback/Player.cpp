@@ -11,6 +11,10 @@
 #include "platform/KnownFolders.h"
 #include "playback/LibVlc.h"
 #include "playback/MediaFiles.h"
+#include <cstdio>
+#include <chrono>
+void TRACE(const char *what) { static FILE *f = std::fopen("C:\Users\lhacenmed\sona-trace.txt", "a"); static auto t0 = std::chrono::steady_clock::now(); std::fprintf(f, "%6lld ms  %s
+", (long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count(), what); std::fflush(f); }
 
 namespace {
 
@@ -65,6 +69,7 @@ Player::Player()
     }();
     m_messageWindow = CreateWindowExW(0, MAKEINTATOM(messageClass), nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                       GetModuleHandleW(nullptr), nullptr);
+    TRACE("player created");
     m_engine = std::thread([this] { runEngine(); });
     post([this] { startEngine(); });
 }
@@ -128,6 +133,7 @@ void Player::startEngine()
     for (const libvlc_event_e event : watchedEvents)
         libvlc_event_attach(events, event, &Player::onEvent, this);
     m_player = player;
+    TRACE("libvlc ready");
 }
 
 void Player::post(std::function<void()> command)
@@ -172,6 +178,7 @@ void Player::handleEvent(int type, int videoOutputCount)
         return;
     switch (type) {
     case libvlc_MediaPlayerPlaying:
+        TRACE("playing");
         // libVLC opens the audio output at its own volume; the app's applies from now on.
         applyAudio();
         if (libvlc_media_t *media = libvlc_media_player_get_media(player)) {
@@ -188,6 +195,7 @@ void Player::handleEvent(int type, int videoOutputCount)
             applyAudio();
         break;
     case libvlc_MediaPlayerVout:
+        TRACE("vout");
         m_hasVideo = videoOutputCount > 0;
         break;
     }
@@ -249,6 +257,7 @@ void Player::setVideoWindow(HWND window)
 
 void Player::open(const std::wstring &location)
 {
+    TRACE("open called");
     m_title = displayName(location);
     m_folderName = isUrl(location) ? std::wstring() : std::filesystem::path(location).parent_path().filename().wstring();
     m_chapters.clear();
@@ -264,6 +273,7 @@ void Player::open(const std::wstring &location)
         libvlc_media_player_set_media(player, media);
         libvlc_media_release(media);
         libvlc_media_player_play(player);
+        TRACE("play command run");
     });
 }
 
@@ -383,7 +393,7 @@ void Player::onParsed(const libvlc_event_t *event, void *opaque)
     Player *self = request->player;
     if (event->u.media_parsed_changed.new_status == libvlc_media_parsed_status_done) {
         if (const libvlc_time_t duration = libvlc_media_get_duration(request->media); duration > 0)
-            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { done(seconds); });
+            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { TRACE("duration"); done(seconds); });
     }
     // A media can't be released from its own event.
     self->post([self, request] { self->releaseDurationRequest(request); });

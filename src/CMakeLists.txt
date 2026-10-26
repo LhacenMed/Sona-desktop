@@ -6,6 +6,7 @@ add_executable(sona WIN32
     core/TimeText.cpp
     data/Bookmarks.cpp
     data/Database.cpp
+    graphics/BackdropCapture.cpp
     graphics/Canvas.cpp
     graphics/GraphicsDevice.cpp
     graphics/WindowSurface.cpp
@@ -55,7 +56,6 @@ add_executable(sona WIN32
     widgets/ListView.cpp
     widgets/Menu.cpp
     widgets/Overlay.cpp
-    widgets/Popover.cpp
     widgets/ScrollView.cpp
     widgets/Segmented.cpp
     widgets/Slider.cpp
@@ -99,7 +99,7 @@ target_compile_definitions(sona PRIVATE
 
 target_compile_options(sona PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /MP)
 
-target_link_libraries(sona PRIVATE libvlc sqlite3 d3d11 dxgi d2d1 dwrite dcomp dwmapi dxguid imm32 shcore shlwapi)
+target_link_libraries(sona PRIVATE libvlc sqlite3 windowsapp d3d11 dxgi d2d1 dwrite dcomp dwmapi dxguid imm32 shcore shlwapi)
 
 # The libVLC runtime next to the executable, so it runs from the build folder.
 add_custom_command(TARGET sona POST_BUILD

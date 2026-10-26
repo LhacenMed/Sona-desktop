@@ -14,6 +14,7 @@
 #include "platform/KeyChord.h"
 #include "style/Theme.h"
 
+class BackdropCapture;
 class GraphicsDevice;
 class Overlay;
 class PopupWindow;
@@ -27,15 +28,15 @@ enum class WindowFrame { Resizable, Fixed, Popup };
 
 // A top-level window whose content reaches into the title bar while keeping the native frame: resize
 // borders, Aero Snap, the system menu, window animations, the DWM shadow and rounded corners. Its
-// content is a tree of Views drawn with Direct2D, under an Overlay for popovers and callouts. The
+// content is a tree of Views drawn with Direct2D, under an Overlay for callouts. The
 // title bar is views too, which tell the frame what they are (HitRole): the caption, the system
 // menu, and the minimize, maximize and close buttons, drawn at Windows' own size (captionButtonSize)
 // and answering as Windows' own, so Snap Layouts work.
 //
 // Input goes to views: the mouse to the view under it, keys to the focused view and then to the
-// window's shortcuts (keyPressed). An open popup takes the keys first. An open popup or popover
-// closes on Escape or on a click anywhere else, and that click does nothing more; until then, the
-// content it floats over takes no part in the mouse (no hover, pointer shape, tooltip or scroll).
+// window's shortcuts (keyPressed). An open popup takes the keys first. An open popup closes on
+// Escape or on a click anywhere else, and that click does nothing more; until then, the content it
+// floats over takes no part in the mouse (no hover, pointer shape, tooltip or scroll).
 class Window
 {
 public:
@@ -61,8 +62,14 @@ public:
     // Whether a press is held on a view, and whether a popup is open over this window.
     bool isPressing() const { return m_pressed != nullptr; }
     bool hasPopup() const { return m_popup != nullptr; }
+    Window *popup() const { return m_popup; }
     // Closes the popup open over this window, and any popup it owns.
     void closePopup();
+    // The window this one opened over, through any popups: itself, unless it's a popup.
+    Window &rootWindow();
+    // What this window looks like, captured for the frosted popups over it to blur: kept warm from
+    // just after it first shows (a resizable window) or its first popup, and live while one is open.
+    BackdropCapture &backdropCapture();
     // Hides the pointer over the client area until it next moves.
     void hidePointer();
 
@@ -188,6 +195,8 @@ private:
     // The window that owns this one, when it's one of ours, and whether this one is modal over it.
     Window *m_owner = nullptr;
     bool m_modal = false;
+    // Before the owned windows, so the popups subscribed to it go first.
+    std::unique_ptr<BackdropCapture> m_backdropCapture;
     std::vector<std::unique_ptr<Window>> m_ownedWindows;
     // The popup open over this window, which takes its keys.
     Window *m_popup = nullptr;

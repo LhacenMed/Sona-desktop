@@ -4,7 +4,9 @@
 #include <vector>
 
 #include "graphics/Canvas.h"
+#include "platform/PopupWindow.h"
 #include "settings/AppSettings.h"
+#include "style/Surface.h"
 #include "style/Theme.h"
 #include "widgets/Button.h"
 #include "widgets/DialogWindow.h"
@@ -12,8 +14,6 @@
 #include "widgets/IconButton.h"
 #include "widgets/Label.h"
 #include "widgets/ListView.h"
-#include "widgets/Overlay.h"
-#include "widgets/Popover.h"
 #include "widgets/ScrollView.h"
 #include "widgets/Segmented.h"
 #include "widgets/Slider.h"
@@ -50,10 +50,10 @@ public:
 };
 
 // A control-bar panel: tabs over the queue.
-class SamplePopover : public Popover
+class SamplePopover : public Column
 {
 public:
-    SamplePopover() : Popover(10)
+    SamplePopover() : Column(10)
     {
         setPreferredSize({400, 0});
         setPadding({0, 0, 0, 20});
@@ -136,7 +136,11 @@ public:
         Row &layers = section(page, L"Tooltip, popover and dialog");
         layers.add<IconWrapper>(L"settings").setTooltip(L"Settings");
         auto &popoverButton = sized(layers.add<Button>(L"Open popover", ButtonKind::Secondary, buttonStyle), {140, 32});
-        popoverButton.setOnClick([&popoverButton] { popoverButton.window()->overlay().openPopover<SamplePopover>(popoverButton); });
+        popoverButton.setOnClick([&popoverButton] {
+            Window &host = *popoverButton.window();
+            host.openWindow<PopupWindow>(host, popoverButton.mapToWindow(popoverButton.bounds()), PopupPlacement::Below,
+                                         Surfaces::panel, std::make_unique<SamplePopover>());
+        });
         auto &dialogButton = sized(layers.add<Button>(L"Open dialog", ButtonKind::Secondary, buttonStyle), {140, 32});
         dialogButton.setOnClick([&window, &theme] { openSampleDialog(window, theme); });
     }
