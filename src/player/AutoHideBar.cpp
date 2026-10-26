@@ -16,29 +16,34 @@ constexpr std::chrono::milliseconds slideDuration{167};
 AutoHideBar::AutoHideBar(const View &view)
     : m_view(view)
     , m_reveal(1)
-    , m_hideDelay([this] { slide(false); })
 {
 }
 
-void AutoHideBar::follow(std::optional<float> distanceFromEdge, float size)
+void AutoHideBar::follow(std::optional<float> distanceFromEdge, float size, Clock::time_point now)
 {
     const bool shown = m_reveal.target() == 1;
     const bool onBar = distanceFromEdge && *distanceFromEdge < size;
     const bool nearBar = distanceFromEdge && *distanceFromEdge < size + keepMargin;
-    if (onBar || (shown && nearBar))
+    if (onBar || (shown && nearBar)) {
         show();
-    else if (shown && !m_hideDelay.isActive())
-        m_hideDelay.start(hideDelay, false);
+        return;
+    }
+    if (!shown)
+        return;
+    if (!m_leavesAt)
+        m_leavesAt = now + hideDelay;
+    else if (now >= *m_leavesAt)
+        slide(false);
 }
 
 void AutoHideBar::show()
 {
-    m_hideDelay.stop();
     slide(true);
 }
 
 void AutoHideBar::slide(bool in)
 {
+    m_leavesAt.reset();
     m_reveal.animateTo(in ? 1.0f : 0.0f, slideDuration);
     m_view.invalidate();
 }

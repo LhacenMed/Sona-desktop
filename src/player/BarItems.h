@@ -5,6 +5,7 @@
 
 #include "player/BarLayout.h"
 
+class Bookmarks;
 class CommandRegistry;
 class Player;
 class Row;
@@ -15,6 +16,8 @@ class View;
 struct BarContext
 {
     Player &player;
+    // The playing media's, marked on the seek bar.
+    Bookmarks &bookmarks;
     SettingsStore &settings;
     const CommandRegistry &commands;
     // Opens the main menu from the button that asks for it.

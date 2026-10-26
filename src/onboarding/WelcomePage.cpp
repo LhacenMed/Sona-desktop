@@ -69,8 +69,8 @@ WelcomePage::WelcomePage(SettingsStore &settings)
 
     m_folderPath->setText(displayPath(settings.get(AppSettings::mediaFolder)));
     m_browse->setOnClick([this] {
-        if (const auto folder = chooseFolder(window()->hwnd(), m_settings.get(AppSettings::mediaFolder)))
-            m_settings.set(AppSettings::mediaFolder, *folder);
+        chooseFolder(*window(), m_settings.get(AppSettings::mediaFolder),
+                     [this](std::wstring folder) { m_settings.set(AppSettings::mediaFolder, folder); });
     });
     m_settingsSubscription = settings.changed.connect(
         [this] { m_folderPath->setText(displayPath(m_settings.get(AppSettings::mediaFolder))); });

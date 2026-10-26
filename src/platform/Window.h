@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -75,6 +76,12 @@ public:
     void setFocus(View *view);
     // A rectangle of the client area in DIPs (as View::mapToWindow gives it), on screen in pixels.
     RECT toScreenPixels(const Rect &rect) const;
+
+    // Runs `task` once the message being handled is done, as Windows delivers a menu's command after
+    // the menu has closed. Anything that runs its own message loop (a file dialog) starts this way, so
+    // that loop never runs inside a click or key handler whose views and windows it may close. The
+    // task is dropped if the window is destroyed first.
+    void runLater(std::function<void()> task);
 
     // Opens a window this one owns (a dialog, a popup); it lives until it's closed.
     template <typename T, typename... Args>

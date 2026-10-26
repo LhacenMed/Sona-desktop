@@ -108,9 +108,10 @@ Setup.
 | Commands | Registry of every action and its shortcuts; keyboard handling and the onboarding guide read it (keys decided in D3) | `commands/`, `maininterface/MainCommands` |
 | Widget gallery | Every widget on one page, Debug builds only: `sona.exe --gallery` | `gallery/` |
 | Design tokens | Dark/Light palettes, 9 accent colours, theme mode (Light/Dark/System) | `style/Theme` |
-| Settings | Registry store; 4 settings (onboardingCompleted, theme, accentIndex, mediaFolder) | `settings/` |
-| Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close | `playback/Player` |
-| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on by default when opened with media), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop, "Open with" | `player/`, `maininterface/` |
+| Settings | Registry store; 5 settings (onboardingCompleted, theme, accentIndex, mediaFolder, showRemainingTime) | `settings/` |
+| Data | SQLite (vendored in `third_party/sqlite`) in `%LOCALAPPDATA%\Sona\sona.db` with versioned migrations; bookmarks per media | `data/` |
+| Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close, chapters, durations read ahead; the queue (play order, repeat off/all/one, shuffle, move, sort, remove), the one place media is opened from; folders expand to their media in Explorer's order | `playback/Player`, `Queue`, `MediaFiles` |
+| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on by default when opened with media), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop (into the queue while it's open), "Open with", Open File(s) and Open Folder; the queue panel (Queue, Bookmarks, Chapters tabs) docked over the video, its button active while it's open; a click on a row plays it or jumps to it; bookmarks marked on the seek bar (hover for the name, click to jump); Open Folder browses a folder's media files and takes the folder with Select Folder | `player/`, `maininterface/` |
 | Onboarding | Welcome + media folder, theme + accent with live preview, shortcuts guide | `onboarding/` |
 | Packaging | Release build, libVLC deploy with plugin cache, per-user installer | `cmake/`, `platform/windows/` |
 
@@ -118,8 +119,7 @@ Setup.
 
 Everything in [section 5](#5-ui-specification) beyond the above:
 
-- auto-hiding bars, menus, the right-click menu, all panels, the queue, the library, all dialogs and
-  the settings window
+- the tracks and preferences panels, the library, all dialogs and the settings window
 - music view, miniplayer, customize player, profiles, light-theme review
 
 Toolkit pieces still missing ([section 6](#6-system-architecture-to-add)): `Menu`, `InfoIcon`,
@@ -199,7 +199,7 @@ Each one is one widget in `widgets/`, built once and reused everywhere. Figma id
 | `TextField` | Settings fields, dialog inputs, search | Caret, selection, IME, clipboard, placeholder. |
 | `ColorField` | Subtitle colours | Hex text + swatch; opens the Windows colour picker. |
 | `Tabs` | Panel tab strips | Icon + label tabs; the active one is accent-coloured with an underline. |
-| `ListRow` | Library rows, queue rows, tracks | Icon/thumbnail, text, trailing text, hover/selected; drag handle in the queue. |
+| `ListRow`, `ListView` | Library rows, queue rows, tracks | Icon/number/thumbnail, text, trailing text, hover, selected and current. `ListView`: click selects, double click activates, Delete removes, drag reorders. |
 | `Popover` | Control-bar panels | Floating panel in the window's overlay layer with a shadow. |
 | `Menu` | `menu 6062:13354`, `right-click menu 6065:13616`, context menus | Top-level popup window: two-tone icon, label, shortcut, chevron submenus, dividers, keyboard navigation. |
 | `DialogFrame` | Settings, shortcuts, subtitles, network, playlist | 1048 wide; title + ✕, content, footer with Cancel/Save (Save is accent-coloured when enabled). |
@@ -397,6 +397,8 @@ states in `sidebar 848:1996`.
 **Full library** (replaces the video while browsing). Frames: `Player 970:2703` (grid), `970:3308`
 and `970:3792` (list), `970:4028` (nothing playing), `6261:15078` (Home).
 
+- **Empty launch:** opening Sona without media shows the full library on Home (`6261:15078`, or
+  `970:4028` with nothing playing) instead of the empty player.
 - **Left navigation:** Home, Videos, Music, Network, Playlists, Recent, "Add item" (pins).
 - **Top row:** back/forward, breadcrumb, count, sort, view, search field, +, ⋯.
 - **Grid:** 16:9 thumbnails with a progress strip.
@@ -594,8 +596,10 @@ player and the control-bar slots all read this registry. It replaces the current
 
 ### 6.3 Playback (`playback/`)
 
-- **Queue:** `libvlc_media_list` and `libvlc_media_list_player` behind a `Queue` model (items, current,
-  repeat, shuffle, move, add, remove, a `changed` signal).
+- **Queue** (built): our own `Queue` model on the UI thread (items, current, repeat, shuffle, move, sort,
+  add, remove, a `changed` signal) playing one item at a time through `Player`'s media player and moving
+  on when it reports `ended`. Not `libvlc_media_list_player`: in libVLC 3 it has no shuffle and no move,
+  tracks its current item by index (reordering breaks it) and can't be called from its own events.
 - **Tracks and devices:** list and select video/audio/subtitle tracks; add external
   subtitles/audio (`libvlc_media_player_add_slave`); audio output devices.
 - **Effects:** rate, audio/subtitle delay, equalizer (`libvlc_audio_equalizer_*`), video adjust,
@@ -614,9 +618,8 @@ App data that isn't a preference lives in `%LOCALAPPDATA%\Sona\`:
 - playlists, pins, recents, bookmarks
 - subtitle associations, presets, profiles, saved streams
 
-**Recommended:** SQLite (vendored amalgamation, one `Database` class, versioned migrations) for its
-queries, sorting and integrity. A JSON-per-store alternative is simpler but slow for the library.
-This is decision D1 below.
+**Decided (D1):** SQLite (vendored amalgamation in `third_party/sqlite`, one `Database` class,
+versioned migrations), built in P3 for bookmarks.
 
 ### 6.5 Library (`library/`)
 
@@ -654,7 +657,7 @@ This is decision D1 below.
 
 | Feature | VLC reference (`AndroidStudioProjects/VLC`, `modules/gui/qt`) | libVLC 3 API |
 | --- | --- | --- |
-| Queue | `playlist/` | `libvlc_media_list`, `libvlc_media_list_player` |
+| Queue | `playlist/` | Our own `Queue` over `libvlc_media_player` (see 6.3) |
 | Library | `medialibrary/` | Not in libVLC 3; index ourselves (`libvlc_media_parse_with_options`) |
 | Subtitles | `dialogs/` | `libvlc_media_player_add_slave`, `libvlc_video_set_spu_delay`, `libvlc_video_set_spu` |
 | Audio | `player/`, `dialogs/extended` | `libvlc_audio_equalizer_*`, `libvlc_audio_output_device_*`, `libvlc_audio_set_delay` |
@@ -698,8 +701,8 @@ Each phase ends with something visible and checkable.
 | **P10 Customize and streaming** | 5.10, 6.8 | Customize Player drag-and-drop editor; profiles with layouts; convert, stream, record, casting | A rearranged layout persists per profile; a file casts to a device. |
 | **P11 Polish** | all | Light theme pass, accessibility (UI Automation names, keyboard focus), performance (startup < 300 ms, idle memory), installer associations | Both themes match Figma; Narrator reads the controls. |
 
-Progress: P0 (foundation, playback, onboarding, packaging), P1 (toolkit and commands) and P2 (player
-chrome) are done. Next: **P3**.
+Progress: P0 (foundation, playback, onboarding, packaging), P1 (toolkit and commands), P2 (player
+chrome) and P3 (queue) are done. Next: **P4**.
 
 ---
 
@@ -709,7 +712,7 @@ Ask the user before building anything that depends on these:
 
 | # | Decision | Options | Recommendation |
 | --- | --- | --- | --- |
-| D1 | App data store | SQLite (vendored) · JSON files | SQLite |
+| D1 | App data store | **Decided:** SQLite (vendored), built in P3 | — |
 | D2 | OpenSubtitles | Official REST API (needs a key and user login) · leave out | Ask the user for an API key |
 | D3 | Keyboard map conflicts (Ctrl+C capture vs copy, Ctrl+F folder vs find, B bookmarks vs audio cycle) | **Decided:** the menus' keys everywhere: Previous/Next Item P / N (the guide shows them), Record Shift+R, Ctrl+F Open Folder and Ctrl+E library search; a focused text field keeps Ctrl+C/V/X/A/Z, so Ctrl+C is Capture Device elsewhere; B cycles audio and Ctrl+B adds a bookmark | — |
 | D4 | Features libVLC 3 can't do (reverse playback, previous frame) | Hide · show disabled with a reason | Show disabled with a reason |

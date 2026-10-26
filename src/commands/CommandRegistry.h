@@ -17,6 +17,8 @@ public:
 
     // Its name for the current state.
     std::wstring label(CommandId id) const;
+    // Whether the state its active label names holds now.
+    bool isActive(CommandId id) const;
     // Whether it has a feature behind it and can run now.
     bool canRun(CommandId id) const;
     void run(CommandId id) const;

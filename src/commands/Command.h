@@ -29,6 +29,7 @@ enum class CommandId {
     ShowSubtitleTracks,
     ShowPlaybackSettings,
     ToggleQueue,
+    AddBookmark,
     ToggleFileBrowser,
     TakeSnapshot,
     Record,
@@ -49,7 +50,7 @@ enum class CommandId {
 struct Command
 {
     std::wstring label;
-    // The name it goes by while `active` (Pause while playing, Show UI while hidden).
+    // The name it goes by while `active`, if it changes (Pause while playing, Show UI while hidden).
     std::wstring activeLabel;
     // A two-tone icon (assets/icons/<icon>-duo.svg), for menus; the bars' buttons use its single-
     // colour version (<icon>.svg). Empty for none.

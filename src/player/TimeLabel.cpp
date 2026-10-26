@@ -1,8 +1,6 @@
 #include "player/TimeLabel.h"
 
-#include <cmath>
-#include <format>
-
+#include "core/TimeText.h"
 #include "graphics/Canvas.h"
 #include "style/Theme.h"
 
@@ -18,10 +16,7 @@ void TimeLabel::paint(Canvas &canvas)
     const Palette &palette = canvas.palette();
     if (m_hoverHighlight)
         canvas.fillRoundedRect(bounds(), 6, palette.bgB2.faded(hoverAmount()));
-    const double seconds = m_seconds();
-    const long long total = std::llround(std::abs(seconds));
-    canvas.drawText(std::format(L"{}{:02}:{:02}:{:02}", seconds < 0 ? L"-" : L"", total / 3600, total % 3600 / 60, total % 60),
-                    bounds(), {.size = 15, .align = TextAlign::Center}, palette.fgA2);
+    canvas.drawText(clockText(m_seconds()), bounds(), {.size = 15, .align = TextAlign::Center}, palette.fgA2);
 }
 
 void TimeLabel::mouseReleased(Point, bool inside)

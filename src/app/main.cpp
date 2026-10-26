@@ -4,12 +4,14 @@
 #include <ShObjIdl.h>
 
 #include <exception>
-#include <filesystem>
 #include <string>
 
+#include "data/Bookmarks.h"
+#include "data/Database.h"
 #include "graphics/GraphicsDevice.h"
 #include "maininterface/MainWindow.h"
 #include "playback/Player.h"
+#include "playback/Queue.h"
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
 
@@ -38,25 +40,30 @@ void runMessageLoop()
     }
 }
 
-// The player, playing `media` (a path or a URL) if there is one.
-void runPlayer(std::wstring media)
+// The player, playing `media` (a path, a folder or a URL) if there is one.
+void runPlayer(const std::wstring &media)
 {
-    if (!media.empty() && media.find(L"://") == std::wstring::npos)
-        media = std::filesystem::absolute(media).wstring();
-
     // Created first, so libVLC loads while the window is being set up.
     Player player;
     SettingsStore settings;
     Theme theme(settings);
+    Database database;
+    Bookmarks bookmarks(database);
+    Queue queue(player);
+    // Bookmarks are the playing item's.
+    const Subscription playingBookmarks = queue.changed.connect([&queue, &bookmarks] {
+        const QueueItem *playing = queue.currentItem();
+        bookmarks.setMedia(playing ? playing->location : std::wstring());
+    });
     GraphicsDevice graphics;
-    MainWindow window(graphics, theme, settings, player);
+    MainWindow window(graphics, theme, settings, player, queue, bookmarks);
 
     // Launching with media opens a player: maximized, its bars auto-hiding over the video. An empty
     // launch opens at the default size with the bars fixed.
     window.setBarsAutoHide(!media.empty());
     window.show(!media.empty());
     if (!media.empty())
-        player.open(media);
+        queue.open({media});
     if (!settings.get(AppSettings::onboardingCompleted))
         window.showOnboarding();
     runMessageLoop();

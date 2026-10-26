@@ -2,9 +2,7 @@
 
 #include "platform/Window.h"
 
-class CommandRegistry;
-class Player;
-class SettingsStore;
+struct BarContext;
 
 // First-run onboarding (Figma "Onboarding" 1899:3055, 1902:3670, 1902:6770): welcome, theme and
 // shortcuts, modal over its owner. Finishing marks onboarding as done; closing it early shows it
@@ -12,6 +10,6 @@ class SettingsStore;
 class OnboardingWindow : public Window
 {
 public:
-    OnboardingWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player,
-                     const CommandRegistry &commands, HWND owner);
+    // `bars` is the player's, which the theme step previews.
+    OnboardingWindow(GraphicsDevice &graphics, Theme &theme, const BarContext &bars, HWND owner);
 };

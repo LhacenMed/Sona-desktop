@@ -5,7 +5,13 @@
 std::wstring CommandRegistry::label(CommandId id) const
 {
     const Command &entry = command(id);
-    return entry.active && entry.active() ? entry.activeLabel : entry.label;
+    return !entry.activeLabel.empty() && isActive(id) ? entry.activeLabel : entry.label;
+}
+
+bool CommandRegistry::isActive(CommandId id) const
+{
+    const Command &entry = command(id);
+    return entry.active && entry.active();
 }
 
 bool CommandRegistry::canRun(CommandId id) const

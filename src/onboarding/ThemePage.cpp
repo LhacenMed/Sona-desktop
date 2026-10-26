@@ -19,8 +19,8 @@ constexpr TextStyle headingStyle{.size = 24, .weight = DWRITE_FONT_WEIGHT_LIGHT,
 class PlayerPreview : public View
 {
 public:
-    PlayerPreview(SettingsStore &settings, Player &player, const CommandRegistry &commands)
-        : m_context{player, settings, commands, [](View &) {}}
+    explicit PlayerPreview(const BarContext &bars)
+        : m_context(bars)
         , m_titleBar(add<TitleBar>(m_context))
         , m_controlBar(add<ControlBar>(m_context))
     {
@@ -149,9 +149,10 @@ private:
 
 } // namespace
 
-ThemePage::ThemePage(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands)
+ThemePage::ThemePage(Theme &theme, const BarContext &bars)
 {
-    m_preview = &add<PlayerPreview>(settings, player, commands);
+    SettingsStore &settings = bars.settings;
+    m_preview = &add<PlayerPreview>(bars);
     m_heading = &add<Label>(L"Select your preferred theme and color.", headingStyle, &Palette::fgA1);
     m_tiles = {&add<ThemeTile>(theme, settings, ThemeMode::Light, L"Light"),
                &add<ThemeTile>(theme, settings, ThemeMode::Dark, L"Dark"),

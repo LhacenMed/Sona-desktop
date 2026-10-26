@@ -20,6 +20,8 @@ namespace {
 
 // Posted to an owner when a window it owns is gone, so the owner can delete it.
 constexpr UINT ownedWindowClosedMessage = WM_APP;
+// Posted to a window with a task to run (runLater), which it takes ownership of.
+constexpr UINT laterTaskMessage = WM_APP + 1;
 
 // How long hover feedback takes to fade in or out (Windows' fast control animation).
 constexpr std::chrono::milliseconds hoverFade{83};
@@ -483,6 +485,9 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     case ownedWindowClosedMessage:
         std::erase_if(m_ownedWindows, [lParam](const auto &owned) { return reinterpret_cast<LPARAM>(owned.get()) == lParam; });
         return 0;
+    case laterTaskMessage:
+        (*std::unique_ptr<std::function<void()>>(reinterpret_cast<std::function<void()> *>(lParam)))();
+        return 0;
     }
     return DefWindowProcW(m_hwnd, message, wParam, lParam);
 }
@@ -726,7 +731,12 @@ void Window::pointerPressed(Point point)
     View *target = viewAt(point);
     if (m_overlay->closePopoversOutside(target))
         return;
-    setFocus(target && target->acceptsFocus() ? target : nullptr);
+    // The clicked view takes the focus, or the nearest view around it that accepts it (a list, for
+    // a click on one of its rows).
+    View *focus = target;
+    while (focus && !focus->acceptsFocus())
+        focus = focus->parent();
+    setFocus(focus);
     if (!target)
         return;
     m_pressed = target;
@@ -814,6 +824,13 @@ void Window::setHovered(View *view)
     }
     m_overlay->hoverChanged(view);
     invalidate();
+}
+
+void Window::runLater(std::function<void()> task)
+{
+    auto *posted = new std::function<void()>(std::move(task));
+    if (!PostMessageW(m_hwnd, laterTaskMessage, 0, reinterpret_cast<LPARAM>(posted)))
+        delete posted;
 }
 
 void Window::closePopup()

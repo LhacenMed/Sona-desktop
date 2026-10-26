@@ -15,6 +15,12 @@ void drawDuoIcon(Canvas &canvas, std::wstring_view name, Point topLeft, float si
                    {{0x8F8F8F, palette.fgA2}, {0xAB6314, palette.accentDim}, {0xD37918, palette.accentMain}});
 }
 
+void drawActiveIcon(Canvas &canvas, std::wstring_view name, Point topLeft, float size)
+{
+    canvas.drawSvg(L"icons/" + std::wstring(name) + L"-active.svg", {topLeft.x, topLeft.y, size, size},
+                   {{0xD37918, canvas.palette().accentMain}});
+}
+
 IconView::IconView(std::wstring name, float padding)
     : m_name(std::move(name))
     , m_padding(padding)

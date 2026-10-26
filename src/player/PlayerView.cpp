@@ -6,6 +6,7 @@
 #include "platform/Window.h"
 #include "playback/Player.h"
 #include "player/ControlBar.h"
+#include "player/QueuePanel.h"
 #include "player/TitleBar.h"
 #include "player/VideoView.h"
 #include "style/Theme.h"
@@ -18,18 +19,22 @@ namespace {
 constexpr float controlBarHeight = 54;
 constexpr float videoInset = 10;
 constexpr float titleGap = 1;
+// Panels sit 20 in from the window's right edge, 20 above the control bar and 20 below the title bar.
+constexpr float panelMargin = 20;
 // How long the pointer rests over playing video before it hides.
 constexpr std::chrono::milliseconds pointerRestDuration{2000};
 
 } // namespace
 
-PlayerView::PlayerView(BarContext context)
+PlayerView::PlayerView(BarContext context, Queue &queue)
     : m_context(std::move(context))
+    , m_queue(queue)
     , m_video(add<VideoView>(m_context.player))
     , m_titleBar(add<TitleBar>(m_context))
     , m_controlBar(add<ControlBar>(m_context))
     , m_titleReveal(*this)
     , m_controlsReveal(*this)
+    , m_barsLeave([this] { updateBars(); })
     , m_pointerRest([this] {
         if (m_titleReveal.reveal() == 0 && m_controlsReveal.reveal() == 0 && m_context.player.isPlaying())
             window()->hidePointer();
@@ -57,6 +62,29 @@ void PlayerView::pointerChanged()
         m_pointerRest.stop();
 }
 
+bool PlayerView::isQueueOpen() const
+{
+    const Window *host = window();
+    return host && host->overlay().popover<QueuePanel>();
+}
+
+void PlayerView::toggleQueue()
+{
+    Overlay &overlay = window()->overlay();
+    const bool wasOpen = isQueueOpen();
+    // Opening one panel closes any other.
+    overlay.closePopovers();
+    if (wasOpen)
+        return;
+    // A panel sits against both bars, so they come in with it and stay while it's open.
+    m_titleReveal.show();
+    m_controlsReveal.show();
+    const float top = m_titleBar.frame().height + panelMargin;
+    const float height = std::max(0.0f, frame().height - controlBarHeight - panelMargin - top);
+    const Rect panel{frame().width - panelMargin - QueuePanel::width, top, QueuePanel::width, height};
+    overlay.openPopover<QueuePanel>(panel, m_context, m_queue);
+}
+
 void PlayerView::updateBars()
 {
     Window *host = window();
@@ -73,9 +101,21 @@ void PlayerView::updateBars()
             fromTop = local.y;
             fromBottom = frame().height - local.y;
         }
-        m_titleReveal.follow(fromTop, m_titleBar.frame().height);
-        m_controlsReveal.follow(fromBottom, controlBarHeight);
+        const AutoHideBar::Clock::time_point now = AutoHideBar::Clock::now();
+        m_titleReveal.follow(fromTop, m_titleBar.frame().height, now);
+        m_controlsReveal.follow(fromBottom, controlBarHeight, now);
     }
+
+    // One wake-up for the first bar due to leave.
+    const auto title = m_titleReveal.leavesAt();
+    const auto controls = m_controlsReveal.leavesAt();
+    if (!title && !controls) {
+        m_barsLeave.stop();
+        return;
+    }
+    const auto due = title && controls ? std::min(*title, *controls) : title ? *title : *controls;
+    const auto wait = std::chrono::ceil<std::chrono::milliseconds>(due - AutoHideBar::Clock::now());
+    m_barsLeave.start(std::max(wait, std::chrono::milliseconds(1)), false);
 }
 
 void PlayerView::layout()

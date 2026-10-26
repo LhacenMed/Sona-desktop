@@ -5,10 +5,12 @@
 #include <filesystem>
 #include <iterator>
 #include <memory>
+#include <utility>
 
 #include "core/Text.h"
 #include "platform/KnownFolders.h"
 #include "playback/LibVlc.h"
+#include "playback/MediaFiles.h"
 
 namespace {
 
@@ -43,6 +45,15 @@ void selectNextTrack(libvlc_media_player_t *player, Describe describe, Get get, 
 
 } // namespace
 
+struct Player::DurationRequest
+{
+    Player *player;
+    libvlc_media_t *media;
+    std::function<void(double)> done;
+    // Set by its first parse event; the events of one media arrive one at a time.
+    bool answered = false;
+};
+
 Player::Player()
 {
     static const ATOM messageClass = [] {
@@ -68,6 +79,8 @@ Player::~Player()
             libvlc_media_player_stop(player);
             libvlc_media_player_release(player);
         }
+        while (!m_durationRequests.empty())
+            releaseDurationRequest(m_durationRequests.back().get());
         if (m_vlc)
             libvlc_release(m_vlc);
     });
@@ -168,6 +181,7 @@ void Player::handleEvent(int type, int videoOutputCount)
             }
             libvlc_media_release(media);
         }
+        readChapters();
         break;
     case libvlc_MediaPlayerAudioVolume:
         if (libvlc_audio_get_volume(player) != m_volume)
@@ -179,6 +193,10 @@ void Player::handleEvent(int type, int videoOutputCount)
     }
     sync();
     changed.emit();
+    if (type == libvlc_MediaPlayerEndReached)
+        ended.emit();
+    else if (type == libvlc_MediaPlayerEncounteredError)
+        failed.emit();
 }
 
 void Player::sync()
@@ -188,6 +206,27 @@ void Player::sync()
     m_playing = state == libvlc_Opening || state == libvlc_Buffering || state == libvlc_Playing;
     m_duration = std::max<libvlc_time_t>(libvlc_media_player_get_length(player), 0) / 1000.0;
     m_position = std::max<libvlc_time_t>(libvlc_media_player_get_time(player), 0) / 1000.0;
+}
+
+void Player::readChapters()
+{
+    m_chapters.clear();
+    libvlc_chapter_description_t **chapters = nullptr;
+    // The current title's chapters.
+    const int count = libvlc_media_player_get_full_chapter_descriptions(m_player, -1, &chapters);
+    for (int i = 0; i < count; ++i) {
+        const libvlc_chapter_description_t &chapter = *chapters[i];
+        m_chapters.push_back({chapter.psz_name ? fromUtf8(chapter.psz_name) : L"Chapter " + std::to_wstring(i + 1),
+                              chapter.i_time_offset / 1000.0});
+    }
+    if (count > 0)
+        libvlc_chapter_descriptions_release(chapters, count);
+}
+
+libvlc_media_t *Player::newMedia(const std::wstring &location) const
+{
+    const std::string utf8 = toUtf8(location);
+    return isUrl(location) ? libvlc_media_new_location(m_vlc, utf8.c_str()) : libvlc_media_new_path(m_vlc, utf8.c_str());
 }
 
 void Player::applyAudio()
@@ -210,18 +249,16 @@ void Player::setVideoWindow(HWND window)
 
 void Player::open(const std::wstring &location)
 {
-    const bool isUrl = location.find(L"://") != std::wstring::npos;
-    const std::filesystem::path path(location);
-    m_title = isUrl ? location : path.filename().wstring();
-    m_folderName = isUrl ? std::wstring() : path.parent_path().filename().wstring();
+    m_title = displayName(location);
+    m_folderName = isUrl(location) ? std::wstring() : std::filesystem::path(location).parent_path().filename().wstring();
+    m_chapters.clear();
     changed.emit();
 
-    post([this, location = toUtf8(location), isUrl] {
+    post([this, location] {
         libvlc_media_player_t *player = m_player;
         if (!player)
             return;
-        libvlc_media_t *media = isUrl ? libvlc_media_new_location(m_vlc, location.c_str())
-                                      : libvlc_media_new_path(m_vlc, location.c_str());
+        libvlc_media_t *media = newMedia(location);
         if (!media)
             return;
         libvlc_media_player_set_media(player, media);
@@ -320,4 +357,46 @@ void Player::stop(std::function<void()> done)
             libvlc_media_player_stop(player);
         runOnUiThread(done);
     });
+}
+
+void Player::readDuration(const std::wstring &location, std::function<void(double seconds)> done)
+{
+    post([this, location, done = std::move(done)]() mutable {
+        if (!m_vlc)
+            return;
+        libvlc_media_t *media = newMedia(location);
+        if (!media)
+            return;
+        DurationRequest *request = m_durationRequests.emplace_back(new DurationRequest{this, media, std::move(done)}).get();
+        libvlc_event_attach(libvlc_media_event_manager(media), libvlc_MediaParsedChanged, &Player::onParsed, request);
+        // Local files only: a URL isn't fetched to learn its duration.
+        libvlc_media_parse_with_options(media, libvlc_media_parse_local, -1);
+    });
+}
+
+void Player::onParsed(const libvlc_event_t *event, void *opaque)
+{
+    // Runs on a libVLC thread.
+    auto *request = static_cast<DurationRequest *>(opaque);
+    if (std::exchange(request->answered, true))
+        return;
+    Player *self = request->player;
+    if (event->u.media_parsed_changed.new_status == libvlc_media_parsed_status_done) {
+        if (const libvlc_time_t duration = libvlc_media_get_duration(request->media); duration > 0)
+            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { done(seconds); });
+    }
+    // A media can't be released from its own event.
+    self->post([self, request] { self->releaseDurationRequest(request); });
+}
+
+void Player::releaseDurationRequest(DurationRequest *request)
+{
+    // Already released when the engine stopped first.
+    const auto found = std::ranges::find_if(m_durationRequests, [request](const auto &entry) { return entry.get() == request; });
+    if (found == m_durationRequests.end())
+        return;
+    // Waits for an event being delivered to finish.
+    libvlc_event_detach(libvlc_media_event_manager(request->media), libvlc_MediaParsedChanged, &Player::onParsed, request);
+    libvlc_media_release(request->media);
+    m_durationRequests.erase(found);
 }

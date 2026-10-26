@@ -1,6 +1,5 @@
 #include "gallery/GalleryWindow.h"
 
-#include <array>
 #include <string>
 #include <vector>
 
@@ -12,7 +11,7 @@
 #include "widgets/Dropdown.h"
 #include "widgets/IconButton.h"
 #include "widgets/Label.h"
-#include "widgets/ListRow.h"
+#include "widgets/ListView.h"
 #include "widgets/Overlay.h"
 #include "widgets/Popover.h"
 #include "widgets/ScrollView.h"
@@ -36,35 +35,18 @@ T &sized(T &view, Size size)
     return view;
 }
 
-// The queue rows of Figma 463:846, the first one playing.
-class SampleQueue : public Column
+// The queue list of Figma 463:846, the first item playing.
+class SampleQueue : public ListView
 {
 public:
-    SampleQueue() : Column(12)
+    SampleQueue() : ListView(L"move")
     {
-        constexpr std::array<std::array<const wchar_t *, 2>, 4> items{{
-            {L"The Wand_S01E11.mp4", L"23:06"},
-            {L"The Wand_S01E12.mp4", L"24:18"},
-            {L"The Wand_S01E13.mp4", L"25:00"},
-            {L"The Wand_S01E14.mp4", L"22:35"},
-        }};
-        for (const auto &[name, duration] : items) {
-            ListRow &row = add<ListRow>(L"move", name, duration);
-            row.setFillsWidth(true);
-            row.setOnClick([this, &row] { select(row); });
-            m_rows.push_back(&row);
-        }
-        m_rows.front()->setSelected(true);
+        setItems({{L"The Wand_S01E11.mp4", L"23:06"},
+                  {L"The Wand_S01E12.mp4", L"24:18"},
+                  {L"The Wand_S01E13.mp4", L"25:00"},
+                  {L"The Wand_S01E14.mp4", L"22:35"}},
+                 0);
     }
-
-private:
-    void select(ListRow &chosen)
-    {
-        for (ListRow *row : m_rows)
-            row->setSelected(row == &chosen);
-    }
-
-    std::vector<ListRow *> m_rows;
 };
 
 // A control-bar panel: tabs over the queue.

@@ -36,8 +36,11 @@ void IconButton::paint(Canvas &canvas)
 {
     const Palette &palette = canvas.palette();
     canvas.fillRoundedRect(bounds(), 4, isPressed() ? palette.pressedOverlay : palette.hoverOverlay.faded(hoverAmount()));
-    drawIcon(canvas, m_iconName, {(frame().width - iconSize) / 2, (frame().height - iconSize) / 2},
-             m_enabled ? palette.fgA2 : palette.fgA4);
+    const Point iconOrigin{(frame().width - iconSize) / 2, (frame().height - iconSize) / 2};
+    if (m_isActive && m_isActive())
+        drawActiveIcon(canvas, m_iconName, iconOrigin);
+    else
+        drawIcon(canvas, m_iconName, iconOrigin, m_enabled ? palette.*m_iconColor : palette.fgA4);
 }
 
 void IconButton::mouseReleased(Point, bool inside)

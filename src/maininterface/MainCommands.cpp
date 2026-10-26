@@ -1,10 +1,12 @@
 #include "maininterface/MainCommands.h"
 
 #include "commands/CommandRegistry.h"
+#include "data/Bookmarks.h"
 #include "maininterface/MainWindow.h"
 #include "playback/Player.h"
+#include "playback/Queue.h"
 
-void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &player)
+void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &player, Queue &queue, Bookmarks &bookmarks)
 {
     commands.define(CommandId::PlayPause, {.label = L"Play",
                                            .activeLabel = L"Pause",
@@ -18,8 +20,16 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
                     {.label = L"Seek Backward", .shortcuts = {{VK_LEFT}}, .run = [&player] { player.seekBy(-10); }});
     commands.define(CommandId::SeekForward,
                     {.label = L"Seek Forward", .shortcuts = {{VK_RIGHT}}, .run = [&player] { player.seekBy(10); }});
-    commands.define(CommandId::PreviousItem, {.label = L"Previous Item", .icon = L"previous", .shortcuts = {{'P'}}});
-    commands.define(CommandId::NextItem, {.label = L"Next Item", .icon = L"next", .shortcuts = {{'N'}}});
+    commands.define(CommandId::PreviousItem, {.label = L"Previous Item",
+                                              .icon = L"previous",
+                                              .shortcuts = {{'P'}},
+                                              .run = [&queue] { queue.previous(); },
+                                              .enabled = [&queue] { return queue.hasPrevious(); }});
+    commands.define(CommandId::NextItem, {.label = L"Next Item",
+                                          .icon = L"next",
+                                          .shortcuts = {{'N'}},
+                                          .run = [&queue] { queue.next(); },
+                                          .enabled = [&queue] { return queue.hasNext(); }});
     // libVLC 3 steps frames forward only.
     commands.define(CommandId::PreviousFrame, {.label = L"Previous Frame", .shortcuts = {{VK_OEM_COMMA}}});
     commands.define(CommandId::NextFrame,
@@ -58,7 +68,16 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
     commands.define(CommandId::ShowAudioTracks, {.label = L"Audio Tracks", .icon = L"audio"});
     commands.define(CommandId::ShowSubtitleTracks, {.label = L"Subtitle Tracks", .icon = L"subtitles"});
     commands.define(CommandId::ShowPlaybackSettings, {.label = L"Playback Settings", .icon = L"playback-settings"});
-    commands.define(CommandId::ToggleQueue, {.label = L"Queue", .icon = L"lists", .shortcuts = {{'Q'}}});
+    commands.define(CommandId::ToggleQueue, {.label = L"Queue",
+                                             .icon = L"lists",
+                                             .shortcuts = {{'Q'}},
+                                             .run = [&window] { window.toggleQueue(); },
+                                             .active = [&window] { return window.isQueueOpen(); }});
+    commands.define(CommandId::AddBookmark, {.label = L"Add Bookmark",
+                                             .icon = L"bookmarks",
+                                             .shortcuts = {{.key = 'B', .control = true}},
+                                             .run = [&bookmarks, &player] { bookmarks.add(player.position()); },
+                                             .enabled = [&bookmarks] { return bookmarks.hasMedia(); }});
     commands.define(CommandId::ToggleFileBrowser, {.label = L"File Browser", .shortcuts = {{'L'}}});
     commands.define(CommandId::TakeSnapshot, {.label = L"Take a Snapshot",
                                               .shortcuts = {{.key = 'S', .shift = true}},
@@ -67,9 +86,11 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
     commands.define(CommandId::OpenFile, {.label = L"Open File(s)",
                                           .icon = L"file",
                                           .shortcuts = {{.key = 'O', .control = true}},
-                                          .run = [&window] { window.openFile(); }});
-    commands.define(CommandId::OpenFolder,
-                    {.label = L"Open Folder", .icon = L"folder", .shortcuts = {{.key = 'F', .control = true}}});
+                                          .run = [&window] { window.openFiles(); }});
+    commands.define(CommandId::OpenFolder, {.label = L"Open Folder",
+                                            .icon = L"folder",
+                                            .shortcuts = {{.key = 'F', .control = true}},
+                                            .run = [&window] { window.openFolder(); }});
     commands.define(CommandId::OpenNetworkStream,
                     {.label = L"Open Network Stream", .icon = L"streaming", .shortcuts = {{.key = 'N', .control = true}}});
     commands.define(CommandId::OpenDisc, {.label = L"Open Disc", .icon = L"disc", .shortcuts = {{.key = 'D', .control = true}}});

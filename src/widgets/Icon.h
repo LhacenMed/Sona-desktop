@@ -17,6 +17,9 @@ void drawIcon(Canvas &canvas, std::wstring_view name, Point topLeft, Color color
 // Draws the two-tone variant of an icon (assets/icons/<name>-duo.svg): its grey in FG/A2 and its
 // orange in the accent.
 void drawDuoIcon(Canvas &canvas, std::wstring_view name, Point topLeft, float size = iconSize);
+// Draws the active variant of an icon (assets/icons/<name>-active.svg, Figma's state=active): bolder,
+// in the accent. Buttons show it while what they turn on is on.
+void drawActiveIcon(Canvas &canvas, std::wstring_view name, Point topLeft, float size = iconSize);
 
 // A non-interactive icon, centred in its frame: the icon plus `padding` on each side.
 class IconView : public View

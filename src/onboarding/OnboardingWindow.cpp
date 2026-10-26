@@ -7,6 +7,7 @@
 #include "onboarding/ShortcutsPage.h"
 #include "onboarding/ThemePage.h"
 #include "onboarding/WelcomePage.h"
+#include "player/BarItems.h"
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
 #include "widgets/Button.h"
@@ -25,10 +26,9 @@ public:
 class OnboardingView : public View
 {
 public:
-    OnboardingView(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands,
-                   std::function<void()> finish)
+    OnboardingView(Theme &theme, const BarContext &bars, std::function<void()> finish)
         : m_dragBand(add<DragBand>())
-        , m_pages{&add<WelcomePage>(settings), &add<ThemePage>(theme, settings, player, commands), &add<ShortcutsPage>(commands)}
+        , m_pages{&add<WelcomePage>(bars.settings), &add<ThemePage>(theme, bars), &add<ShortcutsPage>(bars.commands)}
         , m_back(add<Button>(L"Back", ButtonKind::Secondary, buttonStyle))
         , m_next(add<Button>(L"Next", ButtonKind::Primary, buttonStyle))
     {
@@ -75,12 +75,11 @@ private:
 
 } // namespace
 
-OnboardingWindow::OnboardingWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player,
-                                   const CommandRegistry &commands, HWND owner)
+OnboardingWindow::OnboardingWindow(GraphicsDevice &graphics, Theme &theme, const BarContext &bars, HWND owner)
     : Window(graphics, theme)
 {
     create(L"Welcome to " SONA_APP_NAME, {1090, 759}, {1090, 759}, WindowFrame::Fixed, owner);
-    setRoot(std::make_unique<OnboardingView>(theme, settings, player, commands, [this, &settings] {
+    setRoot(std::make_unique<OnboardingView>(theme, bars, [this, &settings = bars.settings] {
         settings.set(AppSettings::onboardingCompleted, true);
         close();
     }));

@@ -28,7 +28,28 @@ public:
         place(popover, anchor);
         return popover;
     }
+    // Opens a popover at `frame`, in this layer's coordinates (the window's content). It closes as the
+    // one above does.
+    template <typename T, typename... Args>
+    T &openPopover(const Rect &frame, Args &&...args)
+    {
+        T &popover = add<T>(std::forward<Args>(args)...);
+        m_popovers.push_back(&popover);
+        popover.setFrame(frame);
+        popover.invalidate();
+        return popover;
+    }
     bool hasPopovers() const { return !m_popovers.empty(); }
+    // The open popover of type T, if any.
+    template <typename T>
+    T *popover() const
+    {
+        for (View *open : m_popovers) {
+            if (auto *popover = dynamic_cast<T *>(open))
+                return popover;
+        }
+        return nullptr;
+    }
     void closePopovers();
     // Closes the popovers unless `target`, a view being clicked, is in one; returns whether it did.
     bool closePopoversOutside(const View *target);

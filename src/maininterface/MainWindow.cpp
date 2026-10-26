@@ -7,7 +7,9 @@
 #include "onboarding/OnboardingWindow.h"
 #include "platform/FileDialogs.h"
 #include "platform/PopupWindow.h"
+#include "playback/MediaFiles.h"
 #include "playback/Player.h"
+#include "playback/Queue.h"
 #include "player/PlayerView.h"
 #include "player/TitleBar.h"
 #include "player/VideoHost.h"
@@ -23,19 +25,21 @@ constexpr float contextMenuWidth = 292;
 
 } // namespace
 
-MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player)
+MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player, Queue &queue,
+                       Bookmarks &bookmarks)
     : Window(graphics, theme)
     , m_settings(settings)
     , m_player(player)
+    , m_queue(queue)
 {
-    defineMainCommands(m_commands, *this, player);
+    defineMainCommands(m_commands, *this, player, queue, bookmarks);
     create(SONA_APP_NAME, {1280, 720}, {640, 360}, WindowFrame::Resizable, nullptr);
     m_videoHost = std::make_unique<VideoHost>(hwnd());
     player.setVideoWindow(m_videoHost->hwnd());
 
-    auto view = std::make_unique<PlayerView>(BarContext{player, settings, m_commands, [this](View &button) {
+    auto view = std::make_unique<PlayerView>(BarContext{player, bookmarks, settings, m_commands, [this](View &button) {
         Menu::open(*this, button.mapToWindow(button.bounds()), PopupPlacement::Below, mainMenuItems(), m_commands, mainMenuWidth);
-    }});
+    }}, queue);
     m_playerView = view.get();
     setRoot(std::move(view));
     updateTitle();
@@ -48,7 +52,7 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::showOnboarding()
 {
-    openWindow<OnboardingWindow>(graphics(), theme(), m_settings, m_player, m_commands, hwnd());
+    openWindow<OnboardingWindow>(graphics(), theme(), m_playerView->barContext(), hwnd());
 }
 
 bool MainWindow::barsAutoHide() const
@@ -61,6 +65,16 @@ void MainWindow::setBarsAutoHide(bool autoHide)
     m_playerView->setBarsAutoHide(autoHide);
     // The video moves between beside the bars and under them.
     layoutChanged();
+}
+
+bool MainWindow::isQueueOpen() const
+{
+    return m_playerView->isQueueOpen();
+}
+
+void MainWindow::toggleQueue()
+{
+    m_playerView->toggleQueue();
 }
 
 void MainWindow::layoutChanged()
@@ -95,10 +109,16 @@ void MainWindow::contextMenuRequested(Point point)
 
 void MainWindow::filesDropped(HDROP drop)
 {
-    std::wstring path(DragQueryFileW(drop, 0, nullptr, 0), L'\0');
-    DragQueryFileW(drop, 0, path.data(), static_cast<UINT>(path.size() + 1));
+    std::vector<std::wstring> paths(DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0));
+    for (UINT i = 0; i < paths.size(); ++i) {
+        paths[i].resize(DragQueryFileW(drop, i, nullptr, 0));
+        DragQueryFileW(drop, i, paths[i].data(), static_cast<UINT>(paths[i].size() + 1));
+    }
     DragFinish(drop);
-    m_player.open(path);
+    if (isQueueOpen())
+        m_queue.append(paths);
+    else
+        m_queue.open(paths);
 }
 
 void MainWindow::closeRequested()
@@ -113,10 +133,16 @@ void MainWindow::destroyed()
     PostQuitMessage(0);
 }
 
-void MainWindow::openFile()
+void MainWindow::openFiles()
 {
-    if (const auto path = chooseFile(hwnd(), m_settings.get(AppSettings::mediaFolder)))
-        m_player.open(*path);
+    chooseFiles(*this, m_settings.get(AppSettings::mediaFolder), mediaFileType(),
+                [this](std::vector<std::wstring> files) { m_queue.open(files); });
+}
+
+void MainWindow::openFolder()
+{
+    chooseFolderOrFiles(*this, m_settings.get(AppSettings::mediaFolder), mediaFileType(),
+                        [this](std::vector<std::wstring> locations) { m_queue.open(locations); });
 }
 
 void MainWindow::updateTitle()

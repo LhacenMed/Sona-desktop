@@ -7,6 +7,7 @@
 #include "widgets/View.h"
 
 class ControlBar;
+class Queue;
 class TitleBar;
 class VideoView;
 
@@ -19,15 +20,19 @@ class VideoView;
 class PlayerView : public View
 {
 public:
-    explicit PlayerView(BarContext context);
+    PlayerView(BarContext context, Queue &queue);
     ~PlayerView() override;
 
+    const BarContext &barContext() const { return m_context; }
     VideoView &video() const { return m_video; }
     TitleBar &titleBar() const { return m_titleBar; }
     bool barsAutoHide() const { return m_barsAutoHide; }
     void setBarsAutoHide(bool autoHide);
     // The pointer moved or left, or a press or popup that held the bars ended.
     void pointerChanged();
+    // The queue panel (QueuePanel), over the video above the control bar's right end.
+    bool isQueueOpen() const;
+    void toggleQueue();
 
     void layout() override;
     void paint(Canvas &canvas) override;
@@ -39,11 +44,14 @@ private:
     void placeBars();
 
     BarContext m_context;
+    Queue &m_queue;
     VideoView &m_video;
     TitleBar &m_titleBar;
     ControlBar &m_controlBar;
     AutoHideBar m_titleReveal;
     AutoHideBar m_controlsReveal;
+    // Wakes when the first bar is due to leave; bars due together leave in the same pass.
+    Timer m_barsLeave;
     bool m_barsAutoHide = false;
     Timer m_pointerRest;
     Subscription m_playerSubscription;
