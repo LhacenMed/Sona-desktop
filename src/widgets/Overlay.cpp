@@ -197,4 +197,6 @@ void Overlay::showTooltip()
         y = target.y - gap - size.height;
     const float x = std::clamp(target.x + (target.width - size.width) / 2, gap, std::max(gap, frame().width - gap - size.width));
     m_tooltip->setFrame({x, y, size.width, size.height});
+    // Shown from a timer, with nothing else to repaint the window (paused video, for one).
+    m_tooltip->invalidate();
 }
