@@ -141,8 +141,7 @@ void MainWindow::openFiles()
 
 void MainWindow::openFolder()
 {
-    chooseFolderOrFiles(*this, m_settings.get(AppSettings::mediaFolder), mediaFileType(),
-                        [this](std::vector<std::wstring> locations) { m_queue.open(locations); });
+    chooseFolder(*this, m_settings.get(AppSettings::mediaFolder), [this](std::wstring folder) { m_queue.open({folder}); });
 }
 
 void MainWindow::updateTitle()

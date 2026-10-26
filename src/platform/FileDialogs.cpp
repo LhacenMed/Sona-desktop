@@ -3,21 +3,14 @@
 #include <objbase.h>
 #include <ShObjIdl.h>
 #include <wrl/client.h>
-#include <wrl/implements.h>
 
-#include <filesystem>
 #include <iterator>
 
 #include "platform/Window.h"
 
-using Microsoft::WRL::ClassicCom;
 using Microsoft::WRL::ComPtr;
-using Microsoft::WRL::RuntimeClass;
-using Microsoft::WRL::RuntimeClassFlags;
 
 namespace {
-
-constexpr DWORD selectFolderButton = 1;
 
 std::wstring pathOf(IShellItem *item)
 {
@@ -69,46 +62,6 @@ std::vector<std::wstring> chosenPaths(IFileOpenDialog *dialog)
     return paths;
 }
 
-// The Select Folder button of chooseFolderOrFiles: it closes the dialog with the folder selected in
-// it, or else the one it shows, as Windows' own folder picker does.
-class SelectFolderButton : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IFileDialogEvents, IFileDialogControlEvents>
-{
-public:
-    const std::wstring &folder() const { return m_folder; }
-
-    IFACEMETHODIMP OnButtonClicked(IFileDialogCustomize *customize, DWORD) override
-    {
-        ComPtr<IFileDialog> dialog;
-        customize->QueryInterface(IID_PPV_ARGS(&dialog));
-        ComPtr<IShellItem> item;
-        dialog->GetCurrentSelection(&item);
-        std::error_code error;
-        if (m_folder = pathOf(item.Get()); !std::filesystem::is_directory(m_folder, error)) {
-            item.Reset();
-            dialog->GetFolder(&item);
-            m_folder = pathOf(item.Get());
-        }
-        if (!m_folder.empty())
-            dialog->Close(S_OK);
-        return S_OK;
-    }
-
-    // Nothing else the dialog reports matters here.
-    IFACEMETHODIMP OnItemSelected(IFileDialogCustomize *, DWORD, DWORD) override { return S_OK; }
-    IFACEMETHODIMP OnCheckButtonToggled(IFileDialogCustomize *, DWORD, BOOL) override { return S_OK; }
-    IFACEMETHODIMP OnControlActivating(IFileDialogCustomize *, DWORD) override { return S_OK; }
-    IFACEMETHODIMP OnFileOk(IFileDialog *) override { return S_OK; }
-    IFACEMETHODIMP OnFolderChanging(IFileDialog *, IShellItem *) override { return S_OK; }
-    IFACEMETHODIMP OnFolderChange(IFileDialog *) override { return S_OK; }
-    IFACEMETHODIMP OnSelectionChange(IFileDialog *) override { return S_OK; }
-    IFACEMETHODIMP OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *) override { return E_NOTIMPL; }
-    IFACEMETHODIMP OnTypeChange(IFileDialog *) override { return S_OK; }
-    IFACEMETHODIMP OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *) override { return E_NOTIMPL; }
-
-private:
-    std::wstring m_folder;
-};
-
 } // namespace
 
 void chooseFiles(Window &owner, const std::wstring &startFolder, const FileType &type,
@@ -120,30 +73,6 @@ void chooseFiles(Window &owner, const std::wstring &startFolder, const FileType 
             return;
         if (std::vector<std::wstring> files = chosenPaths(dialog.Get()); !files.empty())
             chosen(std::move(files));
-    });
-}
-
-void chooseFolderOrFiles(Window &owner, const std::wstring &startFolder, const FileType &type,
-                         std::function<void(std::vector<std::wstring> locations)> chosen)
-{
-    owner.runLater([&owner, startFolder, type, chosen = std::move(chosen)] {
-        const ComPtr<IFileOpenDialog> dialog = createDialog(startFolder, FOS_ALLOWMULTISELECT, &type);
-        ComPtr<IFileDialogCustomize> customize;
-        if (!dialog || FAILED(dialog.As(&customize)))
-            return;
-        dialog->SetTitle(L"Open Folder");
-        customize->AddPushButton(selectFolderButton, L"Select Folder");
-        const ComPtr<SelectFolderButton> button = Microsoft::WRL::Make<SelectFolderButton>();
-        DWORD cookie = 0;
-        dialog->Advise(button.Get(), &cookie);
-        const HRESULT shown = dialog->Show(owner.hwnd());
-        dialog->Unadvise(cookie);
-        if (!button->folder().empty()) {
-            chosen({button->folder()});
-        } else if (SUCCEEDED(shown)) {
-            if (std::vector<std::wstring> files = chosenPaths(dialog.Get()); !files.empty())
-                chosen(std::move(files));
-        }
     });
 }
 

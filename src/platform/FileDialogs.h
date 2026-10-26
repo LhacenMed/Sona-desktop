@@ -20,9 +20,5 @@ struct FileType
 // Files of `type` (or, by choice, of any type).
 void chooseFiles(Window &owner, const std::wstring &startFolder, const FileType &type,
                  std::function<void(std::vector<std::wstring> files)> chosen);
-// A folder, browsed among its files of `type`: Select Folder takes the selected folder, or else the
-// one shown; Open takes the files chosen in it instead.
-void chooseFolderOrFiles(Window &owner, const std::wstring &startFolder, const FileType &type,
-                         std::function<void(std::vector<std::wstring> locations)> chosen);
-// A folder alone, as a setting needs.
+// A folder, Windows' folder picker listing folders only.
 void chooseFolder(Window &owner, const std::wstring &startFolder, std::function<void(std::wstring folder)> chosen);
