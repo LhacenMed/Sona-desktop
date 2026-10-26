@@ -91,12 +91,15 @@ void Menu::open(Window &owner, Rect anchor, PopupPlacement placement, std::vecto
                 const CommandRegistry &commands, float minimumWidth, bool fromKeyboard)
 {
     owner.openWindow<PopupWindow>(owner, anchor, placement, Surfaces::menu,
-                                  std::make_unique<Menu>(std::move(items), commands, minimumWidth, fromKeyboard ? 0 : -1));
+                                  std::make_unique<Menu>(std::move(items), commands, owner.graphics(), minimumWidth,
+                                                         fromKeyboard ? 0 : -1));
 }
 
-Menu::Menu(std::vector<MenuItem> items, const CommandRegistry &commands, float minimumWidth, int highlighted)
+Menu::Menu(std::vector<MenuItem> items, const CommandRegistry &commands, const GraphicsDevice &graphics, float minimumWidth,
+           int highlighted)
     : m_items(std::move(items))
     , m_commands(commands)
+    , m_graphics(graphics)
     , m_minimumWidth(minimumWidth)
     , m_highlighted(highlighted)
     , m_submenuTimer([this] {
@@ -122,16 +125,12 @@ bool Menu::isLit(int index) const
 
 Size Menu::preferredSize() const
 {
-    const Window *host = window();
     float width = m_minimumWidth;
-    if (host) {
-        const GraphicsDevice &graphics = host->graphics();
-        for (size_t i = 0; i < m_rows.size(); ++i) {
-            const MenuRow &row = *m_rows[i];
-            const float trailing = m_items[i].command ? graphics.measureText(row.shortcut(), shortcutStyle).width : iconSize;
-            width = std::max(width, 2 * menuPadding + nameX + graphics.measureText(row.name(), nameStyle).width + nameGap
-                                        + trailing + rowInset);
-        }
+    for (size_t i = 0; i < m_rows.size(); ++i) {
+        const MenuRow &row = *m_rows[i];
+        const float trailing = m_items[i].command ? m_graphics.measureText(row.shortcut(), shortcutStyle).width : iconSize;
+        width = std::max(width, 2 * menuPadding + nameX + m_graphics.measureText(row.name(), nameStyle).width + nameGap
+                                    + trailing + rowInset);
     }
     return {width, 2 * menuPadding + rowHeight * static_cast<float>(m_rows.size())};
 }

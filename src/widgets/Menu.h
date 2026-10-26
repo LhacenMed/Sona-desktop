@@ -9,6 +9,7 @@
 #include "widgets/View.h"
 
 class CommandRegistry;
+class GraphicsDevice;
 class MenuRow;
 class Window;
 enum class PopupPlacement;
@@ -35,7 +36,9 @@ public:
     static void open(Window &owner, Rect anchor, PopupPlacement placement, std::vector<MenuItem> items,
                      const CommandRegistry &commands, float minimumWidth, bool fromKeyboard = false);
 
-    Menu(std::vector<MenuItem> items, const CommandRegistry &commands, float minimumWidth, int highlighted);
+    // It's measured with `graphics` (its owner's), as its popup is sized before it's shown in it.
+    Menu(std::vector<MenuItem> items, const CommandRegistry &commands, const GraphicsDevice &graphics, float minimumWidth,
+         int highlighted);
 
     Size preferredSize() const override;
     void layout() override;
@@ -56,6 +59,7 @@ private:
 
     std::vector<MenuItem> m_items;
     const CommandRegistry &m_commands;
+    const GraphicsDevice &m_graphics;
     float m_minimumWidth;
     std::vector<MenuRow *> m_rows;
     int m_highlighted;
