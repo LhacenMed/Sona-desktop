@@ -11,7 +11,7 @@
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
 #include "widgets/Label.h"
-#include "widgets/TextButton.h"
+#include "widgets/Button.h"
 
 namespace {
 
@@ -65,7 +65,7 @@ WelcomePage::WelcomePage(SettingsStore &settings)
     auto &folderField = add<FolderField>();
     m_folderField = &folderField;
     m_folderPath = &folderField.path;
-    m_browse = &add<TextButton>(L"Browse", Size{114, 35}, TextStyle{.size = 16}, false);
+    m_browse = &add<Button>(L"Browse", ButtonKind::Secondary, TextStyle{.size = 16});
 
     m_folderPath->setText(displayPath(settings.get(AppSettings::mediaFolder)));
     m_browse->setOnClick([this] {

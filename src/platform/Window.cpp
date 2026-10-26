@@ -1,9 +1,11 @@
 #include "platform/Window.h"
 
 #include <dwmapi.h>
+#include <imm.h>
 #include <ShellScalingApi.h>
 #include <windowsx.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cwchar>
 #include <utility>
@@ -11,9 +13,16 @@
 #include "graphics/WindowSurface.h"
 #include "platform/HResult.h"
 #include "style/Theme.h"
+#include "widgets/Overlay.h"
 #include "widgets/View.h"
 
 namespace {
+
+// Posted to an owner when a window it owns is gone, so the owner can delete it.
+constexpr UINT ownedWindowClosedMessage = WM_APP;
+
+// How long hover feedback takes to fade in or out (Windows' fast control animation).
+constexpr std::chrono::milliseconds hoverFade{83};
 
 int frameThicknessForDpi(UINT dpi)
 {
@@ -25,7 +34,9 @@ int frameThicknessForDpi(UINT dpi)
 Window::Window(GraphicsDevice &graphics, Theme &theme)
     : m_graphics(graphics)
     , m_theme(theme)
+    , m_overlay(std::make_unique<Overlay>())
 {
+    m_overlay->m_window = this;
 }
 
 Window::~Window()
@@ -34,7 +45,44 @@ Window::~Window()
         DestroyWindow(m_hwnd);
 }
 
-void Window::create(const std::wstring &title, Size size, Size minimumSize, bool resizable, HWND owner)
+void Window::create(const std::wstring &title, Size size, Size minimumSize, WindowFrame frame, HWND owner)
+{
+    m_frame = frame;
+    m_minimumSize = minimumSize;
+
+    // Centred in the work area of the owner's monitor, or of the primary monitor.
+    const HMONITOR monitor = owner ? MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST)
+                                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+    GetMonitorInfoW(monitor, &monitorInfo);
+    UINT dpi = USER_DEFAULT_SCREEN_DPI;
+    UINT unusedDpiY = dpi;
+    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &unusedDpiY);
+    // A resizable window keeps invisible resize borders outside its content on the sides and bottom.
+    const bool resizable = frame == WindowFrame::Resizable;
+    const int border = resizable ? frameThicknessForDpi(dpi) : 0;
+    const int width = std::lround(size.width * dpi / USER_DEFAULT_SCREEN_DPI) + 2 * border;
+    const int height = std::lround(size.height * dpi / USER_DEFAULT_SCREEN_DPI) + border;
+    const RECT &work = monitorInfo.rcWork;
+    const LONG left = work.left + (work.right - work.left - width) / 2;
+    const LONG top = work.top + (work.bottom - work.top - height) / 2;
+    const DWORD style = (resizable ? WS_OVERLAPPEDWINDOW : WS_POPUP | WS_CAPTION | WS_SYSMENU) | WS_CLIPCHILDREN;
+    createWindow(title, style, 0, {left, top, left + width, top + height}, owner);
+
+    m_modal = frame == WindowFrame::Fixed && owner;
+    if (m_modal)
+        EnableWindow(owner, FALSE);
+}
+
+void Window::createPopup(HWND owner, const RECT &screenPixels)
+{
+    m_frame = WindowFrame::Popup;
+    // No redirection surface: the composition swap chain is all there is, so its transparent pixels
+    // (around the drawn shadow) show what's behind. Never activated, so the owner keeps the keyboard.
+    createWindow(L"", WS_POPUP, WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, screenPixels, owner);
+}
+
+void Window::createWindow(const std::wstring &title, DWORD style, DWORD extendedStyle, const RECT &bounds, HWND owner)
 {
     static const ATOM windowClass = [] {
         const HINSTANCE instance = GetModuleHandleW(nullptr);
@@ -48,29 +96,13 @@ void Window::create(const std::wstring &title, Size size, Size minimumSize, bool
         description.lpszClassName = L"SonaWindow";
         return RegisterClassExW(&description);
     }();
-    m_resizable = resizable;
-    m_minimumSize = minimumSize;
 
-    // Centred in the work area of the owner's monitor, or of the primary monitor.
-    const HMONITOR monitor = owner ? MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST)
-                                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO monitorInfo{sizeof(monitorInfo)};
-    GetMonitorInfoW(monitor, &monitorInfo);
-    UINT dpi = USER_DEFAULT_SCREEN_DPI;
-    UINT unusedDpiY = dpi;
-    GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi, &unusedDpiY);
-    // A resizable window keeps invisible resize borders outside its content on the sides and bottom.
-    const int frame = resizable ? frameThicknessForDpi(dpi) : 0;
-    const int width = std::lround(size.width * dpi / USER_DEFAULT_SCREEN_DPI) + 2 * frame;
-    const int height = std::lround(size.height * dpi / USER_DEFAULT_SCREEN_DPI) + frame;
-    const RECT &work = monitorInfo.rcWork;
-    const DWORD style = (resizable ? WS_OVERLAPPEDWINDOW : WS_POPUP | WS_CAPTION | WS_SYSMENU) | WS_CLIPCHILDREN;
-
-    CreateWindowExW(0, MAKEINTATOM(windowClass), title.c_str(), style, work.left + (work.right - work.left - width) / 2,
-                    work.top + (work.bottom - work.top - height) / 2, width, height, owner, nullptr,
-                    GetModuleHandleW(nullptr), this);
+    CreateWindowExW(extendedStyle, MAKEINTATOM(windowClass), title.c_str(), style, bounds.left, bounds.top,
+                    bounds.right - bounds.left, bounds.bottom - bounds.top, owner, nullptr, GetModuleHandleW(nullptr), this);
     if (!m_hwnd)
         check(HRESULT_FROM_WIN32(GetLastError()));
+    if (owner)
+        m_owner = reinterpret_cast<Window *>(GetWindowLongPtrW(owner, GWLP_USERDATA));
 
     applyFrameShape();
     applyFrameTheme();
@@ -153,9 +185,14 @@ bool Window::isMaximized() const
 
 void Window::show(bool maximized)
 {
-    // A plain first showing, which is what Windows plays its open animation on.
+    // Laid out again for views added since the root was set, then a plain first showing, which is
+    // what Windows plays its open animation on.
+    layoutRoot();
     render();
-    ShowWindow(m_hwnd, maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
+    if (m_frame == WindowFrame::Popup)
+        ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
+    else
+        ShowWindow(m_hwnd, maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
 }
 
 void Window::toggleFullScreen()
@@ -195,8 +232,36 @@ void Window::invalidate()
         InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+void Window::setFocus(View *view)
+{
+    if (view == m_focused)
+        return;
+    if (View *previous = std::exchange(m_focused, view)) {
+        previous->m_focused = false;
+        previous->focusChanged();
+    }
+    if (view) {
+        view->m_focused = true;
+        view->focusChanged();
+    }
+    invalidate();
+}
+
+RECT Window::toScreenPixels(const Rect &rect) const
+{
+    const float s = scale();
+    POINT topLeft{std::lround(rect.x * s), std::lround(rect.y * s)};
+    POINT bottomRight{std::lround(rect.right() * s), std::lround(rect.bottom() * s)};
+    ClientToScreen(m_hwnd, &topLeft);
+    ClientToScreen(m_hwnd, &bottomRight);
+    return {topLeft.x, topLeft.y, bottomRight.x, bottomRight.y};
+}
+
 void Window::closeRequested()
 {
+    // Re-enabled before this window goes, so Windows activates the owner next.
+    if (m_modal)
+        EnableWindow(GetWindow(m_hwnd, GW_OWNER), TRUE);
     DestroyWindow(m_hwnd);
 }
 
@@ -214,6 +279,8 @@ LRESULT CALLBACK Window::windowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
     if (message == WM_NCDESTROY) {
         self->m_hwnd = nullptr;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        if (self->m_owner && self->m_owner->m_hwnd)
+            PostMessageW(self->m_owner->m_hwnd, ownedWindowClosedMessage, 0, reinterpret_cast<LPARAM>(self));
         return DefWindowProcW(hwnd, message, wParam, lParam);
     }
     return self->handleMessage(message, wParam, lParam);
@@ -221,8 +288,11 @@ LRESULT CALLBACK Window::windowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 
 LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    if (messageReceived(message, wParam, lParam))
-        return 0;
+    // A click on the frame or title bar dismisses popups as a click on the content does.
+    if (message == WM_NCLBUTTONDOWN || message == WM_NCRBUTTONDOWN) {
+        closePopup();
+        m_overlay->closePopovers();
+    }
     // Windows runs its caption buttons itself: hover, press, Snap Layouts. Hit testing asks it in order.
     if (m_nativeCaption && message != WM_NCHITTEST) {
         LRESULT result = 0;
@@ -232,7 +302,7 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
     switch (message) {
     case WM_NCCALCSIZE: {
-        if (!m_resizable)
+        if (m_frame != WindowFrame::Resizable)
             return 0; // The whole window is content.
         RECT &client = wParam ? reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam)->rgrc[0] : *reinterpret_cast<RECT *>(lParam);
         const LONG top = client.top;
@@ -246,13 +316,18 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_NCHITTEST:
         return hitTest(lParam);
+    case WM_MOUSEACTIVATE:
+        if (m_frame == WindowFrame::Popup)
+            return MA_NOACTIVATE;
+        break;
     case WM_SETCURSOR:
         if (LOWORD(lParam) == HTCLIENT) {
             POINT cursor{};
             GetCursorPos(&cursor);
             ScreenToClient(m_hwnd, &cursor);
             const View *view = viewAt(toDips(cursor));
-            SetCursor(LoadCursorW(nullptr, view && view->showsHandCursor() ? IDC_HAND : IDC_ARROW));
+            const Cursor shape = view ? view->cursor() : Cursor::Arrow;
+            SetCursor(LoadCursorW(nullptr, shape == Cursor::Hand ? IDC_HAND : shape == Cursor::Text ? IDC_IBEAM : IDC_ARROW));
             return TRUE;
         }
         break;
@@ -282,13 +357,31 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         if (reinterpret_cast<HWND>(lParam) != m_hwnd)
             cancelPress();
         return 0;
+    case WM_MOUSEWHEEL: {
+        POINT client{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        ScreenToClient(m_hwnd, &client);
+        wheelScrolled(toDips(client), static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA);
+        return 0;
+    }
     case WM_NCACTIVATE:
         m_active = wParam != FALSE;
         invalidate();
         // -1: there is no standard frame for Windows to repaint.
         return DefWindowProcW(m_hwnd, message, wParam, -1);
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE)
+            closePopup();
+        break;
+    case WM_WINDOWPOSCHANGED: {
+        // A popup stays where it opened, so it closes when its owner moves or resizes.
+        const auto *position = reinterpret_cast<const WINDOWPOS *>(lParam);
+        if (!(position->flags & SWP_NOMOVE) || !(position->flags & SWP_NOSIZE))
+            closePopup();
+        break; // Windows sends WM_SIZE from here.
+    }
     case WM_SIZE:
         if (wParam != SIZE_MINIMIZED && m_surface) {
+            m_overlay->closePopovers();
             m_surface->resize();
             layoutRoot();
             render();
@@ -325,9 +418,9 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_GETMINMAXINFO: {
         auto *limits = reinterpret_cast<MINMAXINFO *>(lParam);
-        const int frame = m_resizable ? frameThickness() : 0;
-        limits->ptMinTrackSize = {std::lround(m_minimumSize.width * scale()) + 2 * frame,
-                                  std::lround(m_minimumSize.height * scale()) + frame};
+        const int border = m_frame == WindowFrame::Resizable ? frameThickness() : 0;
+        limits->ptMinTrackSize = {std::lround(m_minimumSize.width * scale()) + 2 * border,
+                                  std::lround(m_minimumSize.height * scale()) + border};
         return 0;
     }
     case WM_SETTINGCHANGE:
@@ -335,9 +428,18 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             m_theme.refresh();
         break;
     case WM_KEYDOWN:
-        if (keyPressed(static_cast<UINT>(wParam), GetKeyState(VK_SHIFT) < 0, GetKeyState(VK_CONTROL) < 0))
+        if (handleKey({static_cast<UINT>(wParam), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0,
+                       GetKeyState(VK_MENU) < 0}))
             return 0;
         break;
+    case WM_CHAR:
+        // Text goes to the focused view; an open popup takes the keyboard.
+        if (!m_popup && m_focused)
+            m_focused->charTyped(static_cast<wchar_t>(wParam));
+        return 0;
+    case WM_IME_STARTCOMPOSITION:
+        placeImeWindows();
+        break; // Windows draws the composition window.
     case WM_DROPFILES:
         filesDropped(reinterpret_cast<HDROP>(wParam));
         return 0;
@@ -345,9 +447,14 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         closeRequested();
         return 0;
     case WM_DESTROY:
+        if (m_owner && m_owner->m_popup == this)
+            m_owner->m_popup = nullptr;
         // The surface draws into this window only; its GPU memory goes with it.
         m_surface.reset();
         destroyed();
+        return 0;
+    case ownedWindowClosedMessage:
+        std::erase_if(m_ownedWindows, [lParam](const auto &owned) { return reinterpret_cast<LPARAM>(owned.get()) == lParam; });
         return 0;
     }
     return DefWindowProcW(m_hwnd, message, wParam, lParam);
@@ -369,7 +476,7 @@ LRESULT Window::hitTest(LPARAM screenPoint)
     if (m_nativeCaption && DwmDefWindowProc(m_hwnd, WM_NCHITTEST, 0, screenPoint, &buttonHit))
         return buttonHit;
     // There's no frame above the content, so the top resize border lies inside it.
-    if (m_resizable && !isMaximized() && client.y < frameThickness())
+    if (m_frame == WindowFrame::Resizable && !isMaximized() && client.y < frameThickness())
         return HTTOP;
 
     const View *view = viewAt(toDips(client));
@@ -400,7 +507,10 @@ View *Window::viewAt(Point point) const
     if (!m_root)
         return nullptr;
     const Rect &content = m_root->frame();
-    return m_root->hitTest({point.x - content.x, point.y - content.y});
+    const Point local{point.x - content.x, point.y - content.y};
+    if (View *hit = m_overlay->hitTest(local))
+        return hit;
+    return m_root->hitTest(local);
 }
 
 RECT Window::contentToClientPixels(const Rect &rect) const
@@ -419,10 +529,12 @@ int Window::frameThickness() const
 
 void Window::applyFrameShape()
 {
-    // Full screen covers the monitor edge to edge: square corners and no border.
-    const DWM_WINDOW_CORNER_PREFERENCE corners = m_fullScreen ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
+    // Full screen covers the monitor edge to edge, and a popup draws its own corners and shadow:
+    // square corners and no border for both.
+    const bool frameless = m_fullScreen || m_frame == WindowFrame::Popup;
+    const DWM_WINDOW_CORNER_PREFERENCE corners = frameless ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
     DwmSetWindowAttribute(m_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
-    const COLORREF border = m_fullScreen ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+    const COLORREF border = frameless ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
     DwmSetWindowAttribute(m_hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
     updateFrameMargins();
 }
@@ -431,8 +543,8 @@ void Window::updateFrameMargins()
 {
     // The native caption is DWM frame extended under the title bar: Windows paints it in the caption
     // colour and draws its buttons there, behind the views. Without one, a sliver of frame keeps the
-    // shadow.
-    int top = 1;
+    // shadow; a popup has none.
+    int top = m_frame == WindowFrame::Popup ? 0 : 1;
     if (m_nativeCaption)
         top = m_fullScreen ? 0 : static_cast<int>(std::lround((contentTop() + captionHeight()) * scale()));
     if (top == m_frameMarginTop)
@@ -462,14 +574,35 @@ void Window::layoutRoot()
     GetClientRect(m_hwnd, &client);
     updateFrameMargins();
     const float top = contentTop();
-    m_root->setFrame({0, top, client.right / scale(), client.bottom / scale() - top});
+    const Rect content{0, top, client.right / scale(), client.bottom / scale() - top};
+    m_root->setFrame(content);
+    m_overlay->setFrame(content);
     layoutChanged();
 }
 
 void Window::render()
 {
-    if (m_surface && m_root)
-        m_surface->render([this](Canvas &canvas) { m_root->paintTree(canvas); });
+    if (m_surface && m_root) {
+        m_surface->render([this](Canvas &canvas) {
+            m_root->paintTree(canvas);
+            m_overlay->paintTree(canvas);
+        });
+    }
+}
+
+bool Window::handleKey(KeyChord chord)
+{
+    if (m_popup) {
+        m_popup->handleKey(chord);
+        return true;
+    }
+    if (chord.key == VK_ESCAPE && m_overlay->hasPopovers()) {
+        m_overlay->closePopovers();
+        return true;
+    }
+    if (m_focused && m_focused->keyPressed(chord))
+        return true;
+    return keyPressed(chord);
 }
 
 void Window::pointerMoved(Point point)
@@ -483,7 +616,15 @@ void Window::pointerMoved(Point point)
 
 void Window::pointerPressed(Point point)
 {
+    m_overlay->hideTooltip();
+    if (m_popup) {
+        closePopup();
+        return;
+    }
     View *target = viewAt(point);
+    if (m_overlay->closePopoversOutside(target))
+        return;
+    setFocus(target && target->acceptsFocus() ? target : nullptr);
     if (!target)
         return;
     m_pressed = target;
@@ -501,8 +642,42 @@ void Window::pointerReleased(Point point)
     released->m_pressed = false;
     const Point local = released->mapFromWindow(point);
     released->mouseReleased(local, released->bounds().contains(local));
+    // The release may have removed views (closing a popover), so the target is found again.
     pointerMoved(point);
     invalidate();
+}
+
+void Window::wheelScrolled(Point point, float notches)
+{
+    m_overlay->hideTooltip();
+    if (!m_root)
+        return;
+    // Any view can scroll, not only those that take clicks: the deepest one under the pointer is
+    // offered the scroll first, then its parents.
+    const Rect &content = m_root->frame();
+    const Point local{point.x - content.x, point.y - content.y};
+    View *target = deepestViewAt(*m_overlay, local);
+    if (target == m_overlay.get())
+        target = deepestViewAt(*m_root, local);
+    for (View *view = target; view; view = view->parent()) {
+        if (view->wheelScrolled(notches)) {
+            // Different content is under the pointer now.
+            pointerMoved(point);
+            return;
+        }
+    }
+}
+
+View *Window::deepestViewAt(View &view, Point point)
+{
+    if (!view.m_visible || !view.bounds().contains(point))
+        return nullptr;
+    for (auto child = view.m_children.rbegin(); child != view.m_children.rend(); ++child) {
+        const Rect &frame = (*child)->m_frame;
+        if (View *hit = deepestViewAt(**child, {point.x - frame.x, point.y - frame.y}))
+            return hit;
+    }
+    return &view;
 }
 
 void Window::cancelPress()
@@ -517,10 +692,60 @@ void Window::setHovered(View *view)
 {
     if (view == m_hovered)
         return;
-    if (m_hovered)
+    if (m_hovered) {
         m_hovered->m_hovered = false;
+        m_hovered->m_hover.animateTo(0, hoverFade);
+    }
     m_hovered = view;
-    if (view)
+    if (view) {
         view->m_hovered = true;
+        view->m_hover.animateTo(1, hoverFade);
+    }
+    m_overlay->hoverChanged(view);
     invalidate();
+}
+
+void Window::closePopup()
+{
+    // Destroying it clears m_popup (WM_DESTROY).
+    if (m_popup)
+        DestroyWindow(m_popup->hwnd());
+}
+
+void Window::placeImeWindows()
+{
+    if (!m_focused)
+        return;
+    const Rect bounds = m_focused->mapToWindow(m_focused->caretBounds());
+    const float s = scale();
+    const RECT caret{std::lround(bounds.x * s), std::lround(bounds.y * s), std::lround(bounds.right() * s),
+                     std::lround(bounds.bottom() * s)};
+    const HIMC context = ImmGetContext(m_hwnd);
+    if (!context)
+        return;
+    COMPOSITIONFORM composition{CFS_POINT, {caret.left, caret.top}, {}};
+    ImmSetCompositionWindow(context, &composition);
+    // The candidate list opens below the caret, never over it.
+    CANDIDATEFORM candidates{0, CFS_EXCLUDE, {caret.left, caret.top}, caret};
+    ImmSetCandidateWindow(context, &candidates);
+    ImmReleaseContext(m_hwnd, context);
+}
+
+void Window::viewRemoved(View &removed)
+{
+    const auto inside = [&removed](const View *view) {
+        for (; view; view = view->m_parent) {
+            if (view == &removed)
+                return true;
+        }
+        return false;
+    };
+    if (inside(m_hovered)) {
+        m_hovered = nullptr;
+        m_overlay->hoverChanged(nullptr);
+    }
+    if (inside(m_pressed))
+        m_pressed = nullptr;
+    if (inside(m_focused))
+        m_focused = nullptr;
 }

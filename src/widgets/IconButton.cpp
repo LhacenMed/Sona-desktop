@@ -27,8 +27,7 @@ Size IconButton::preferredSize() const
 void IconButton::paint(Canvas &canvas)
 {
     const Palette &palette = canvas.palette();
-    if (isPressed() || isHovered())
-        canvas.fillRoundedRect(bounds(), 4, isPressed() ? palette.pressedOverlay : palette.hoverOverlay);
+    canvas.fillRoundedRect(bounds(), 4, isPressed() ? palette.pressedOverlay : palette.hoverOverlay.faded(hoverAmount()));
     drawIcon(canvas, m_iconName, {(frame().width - iconSize) / 2, (frame().height - iconSize) / 2}, palette.fgA2);
 }
 

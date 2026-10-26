@@ -2,13 +2,11 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
+#include "commands/CommandRegistry.h"
 #include "core/Signal.h"
-#include "maininterface/KeyboardShortcuts.h"
 #include "platform/Window.h"
 
-class OnboardingWindow;
 class Player;
 class SettingsStore;
 class TitleBar;
@@ -24,25 +22,23 @@ public:
 
     // First-run onboarding, modal over this window.
     void showOnboarding();
+    void openFile();
 
 private:
     void layoutChanged() override;
-    bool keyPressed(UINT key, bool shift, bool control) override;
+    bool keyPressed(KeyChord chord) override;
     void filesDropped(HDROP drop) override;
-    bool messageReceived(UINT message, WPARAM wParam, LPARAM lParam) override;
     void closeRequested() override;
     void destroyed() override;
 
-    void openFile();
     void updateTitle();
 
     SettingsStore &m_settings;
     Player &m_player;
-    std::vector<ShortcutGroup> m_shortcuts;
+    CommandRegistry m_commands;
     std::unique_ptr<VideoHost> m_videoHost;
     TitleBar *m_titleBar = nullptr;
     View *m_videoView = nullptr;
     std::wstring m_title;
-    std::unique_ptr<OnboardingWindow> m_onboarding;
     Subscription m_playerSubscription;
 };

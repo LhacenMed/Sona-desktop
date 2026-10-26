@@ -35,16 +35,22 @@ inline constexpr std::array<AccentColors, 9> accentColors{{
 struct Palette
 {
     Color accentMain;
+    Color accentDim;
     Color bgAccentBright;
+    Color bgAccentDark;
+    Color bgA2;
     Color bgA3;
     Color bgA4;
+    Color bgA5;
     Color bgB1;
+    Color bgB1Transparent;
     Color bgB2;
     Color fg1;
     Color fg2;
     Color fgA1;
     Color fgA2;
     Color fgA3;
+    Color fgA4;
     Color fgB1;
     Color dividerBright;
     Color volumeTrack;

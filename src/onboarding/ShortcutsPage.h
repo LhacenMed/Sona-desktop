@@ -2,16 +2,17 @@
 
 #include <vector>
 
-#include "maininterface/KeyboardShortcuts.h"
 #include "widgets/View.h"
 
+class CommandRegistry;
 class Label;
 
-// Onboarding step 3 (Figma 1902:6770): the shortcut guide, two columns of six.
+// Onboarding step 3 (Figma 1902:6770): the shortcut guide, two columns of six, with each command's
+// keys read from the registry.
 class ShortcutsPage : public View
 {
 public:
-    explicit ShortcutsPage(const std::vector<ShortcutGroup> &groups);
+    explicit ShortcutsPage(const CommandRegistry &commands);
 
     void layout() override;
 

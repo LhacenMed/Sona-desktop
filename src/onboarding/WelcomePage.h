@@ -5,7 +5,7 @@
 
 class Label;
 class SettingsStore;
-class TextButton;
+class Button;
 
 // Onboarding step 1 (Figma 1899:3055): welcome and the media folder.
 class WelcomePage : public View
@@ -23,6 +23,6 @@ private:
     Label *m_prompt;
     View *m_folderField;
     Label *m_folderPath;
-    TextButton *m_browse;
+    Button *m_browse;
     Subscription m_settingsSubscription;
 };

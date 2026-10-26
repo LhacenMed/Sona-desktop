@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "graphics/Canvas.h"
+#include "maininterface/MainCommands.h"
 #include "maininterface/TitleBar.h"
 #include "onboarding/OnboardingWindow.h"
 #include "platform/FileDialogs.h"
@@ -16,8 +17,6 @@
 #include "style/Theme.h"
 
 namespace {
-
-constexpr UINT onboardingClosedMessage = WM_APP + 1;
 
 // The player layout: video between the title bar and the control bar. The video is added first so
 // the bars paint over the outer half of its rounded frame.
@@ -55,9 +54,9 @@ MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &se
     : Window(graphics, theme)
     , m_settings(settings)
     , m_player(player)
-    , m_shortcuts(makeKeyboardShortcuts(player, [this] { toggleFullScreen(); }))
 {
-    create(SONA_APP_NAME, {1280, 720}, {640, 360}, true, nullptr);
+    defineMainCommands(m_commands, *this, player);
+    create(SONA_APP_NAME, {1280, 720}, {640, 360}, WindowFrame::Resizable, nullptr);
     m_videoHost = std::make_unique<VideoHost>(hwnd());
     player.setVideoWindow(m_videoHost->hwnd());
 
@@ -76,12 +75,7 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::showOnboarding()
 {
-    EnableWindow(hwnd(), FALSE);
-    m_onboarding = std::make_unique<OnboardingWindow>(graphics(), theme(), m_settings, m_player, m_shortcuts, hwnd(), [this] {
-        // Re-enabled before the onboarding window goes, so Windows activates this one next.
-        EnableWindow(hwnd(), TRUE);
-        PostMessageW(hwnd(), onboardingClosedMessage, 0, 0);
-    });
+    openWindow<OnboardingWindow>(graphics(), theme(), m_settings, m_player, m_commands, hwnd());
 }
 
 void MainWindow::layoutChanged()
@@ -91,17 +85,9 @@ void MainWindow::layoutChanged()
     m_videoHost->setBounds(contentToClientPixels(m_videoView->frame()));
 }
 
-bool MainWindow::keyPressed(UINT key, bool shift, bool control)
+bool MainWindow::keyPressed(KeyChord chord)
 {
-    if (control && !shift && key == 'O') {
-        openFile();
-        return true;
-    }
-    if (key == VK_ESCAPE && isFullScreen()) {
-        toggleFullScreen();
-        return true;
-    }
-    return !control && runShortcut(m_shortcuts, {key, shift});
+    return m_commands.runShortcut(chord);
 }
 
 void MainWindow::filesDropped(HDROP drop)
@@ -110,14 +96,6 @@ void MainWindow::filesDropped(HDROP drop)
     DragQueryFileW(drop, 0, path.data(), static_cast<UINT>(path.size() + 1));
     DragFinish(drop);
     m_player.open(path);
-}
-
-bool MainWindow::messageReceived(UINT message, WPARAM, LPARAM)
-{
-    if (message != onboardingClosedMessage)
-        return false;
-    m_onboarding.reset();
-    return true;
 }
 
 void MainWindow::closeRequested()

@@ -13,19 +13,63 @@
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
 
+#ifdef SONA_GALLERY
+#include "gallery/GalleryWindow.h"
+#endif
+
 namespace {
 
-// The media passed on the command line ("Open with", a double-clicked file), as a full path or a URL.
-std::wstring launchMedia()
+// The first command-line argument: media ("Open with", a double-clicked file), or a flag.
+std::wstring launchArgument()
 {
     int count = 0;
     LPWSTR *arguments = CommandLineToArgvW(GetCommandLineW(), &count);
-    std::wstring media = count > 1 ? arguments[1] : L"";
+    std::wstring argument = count > 1 ? arguments[1] : L"";
     LocalFree(arguments);
+    return argument;
+}
+
+void runMessageLoop()
+{
+    MSG message;
+    while (GetMessageW(&message, nullptr, 0, 0)) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+}
+
+// The player, playing `media` (a path or a URL) if there is one.
+void runPlayer(std::wstring media)
+{
     if (!media.empty() && media.find(L"://") == std::wstring::npos)
         media = std::filesystem::absolute(media).wstring();
-    return media;
+
+    // Created first, so libVLC loads while the window is being set up.
+    Player player;
+    SettingsStore settings;
+    Theme theme(settings);
+    GraphicsDevice graphics;
+    MainWindow window(graphics, theme, settings, player);
+
+    // Launching with media opens maximized; an empty launch opens at the default size.
+    window.show(!media.empty());
+    if (!media.empty())
+        player.open(media);
+    if (!settings.get(AppSettings::onboardingCompleted))
+        window.showOnboarding();
+    runMessageLoop();
 }
+
+#ifdef SONA_GALLERY
+void runGallery()
+{
+    SettingsStore settings;
+    Theme theme(settings);
+    GraphicsDevice graphics;
+    GalleryWindow gallery(graphics, theme, settings);
+    runMessageLoop();
+}
+#endif
 
 } // namespace
 
@@ -39,26 +83,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
     int exitCode = 0;
     try {
-        // Created first, so libVLC loads while the window is being set up.
-        Player player;
-        SettingsStore settings;
-        Theme theme(settings);
-        GraphicsDevice graphics;
-        MainWindow window(graphics, theme, settings, player);
-
-        const std::wstring media = launchMedia();
-        // Launching with media opens maximized; an empty launch opens at the default size.
-        window.show(!media.empty());
-        if (!media.empty())
-            player.open(media);
-        if (!settings.get(AppSettings::onboardingCompleted))
-            window.showOnboarding();
-
-        MSG message;
-        while (GetMessageW(&message, nullptr, 0, 0)) {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
+        const std::wstring argument = launchArgument();
+#ifdef SONA_GALLERY
+        if (argument == L"--gallery")
+            runGallery();
+        else
+#endif
+            runPlayer(argument);
     } catch (const std::exception &error) {
         MessageBoxA(nullptr, error.what(), nullptr, MB_ICONERROR);
         exitCode = 1;

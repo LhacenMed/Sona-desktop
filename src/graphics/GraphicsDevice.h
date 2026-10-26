@@ -38,6 +38,10 @@ public:
     Microsoft::WRL::ComPtr<IDWriteTextLayout> layoutText(std::wstring_view text, const TextStyle &style, Size box) const;
     // The size `text` takes, wrapping (when the style wraps) at `maxWidth`.
     Size measureText(std::wstring_view text, const TextStyle &style, float maxWidth = 100000) const;
+    // For a line of leading-aligned text: where the caret before character `index` sits, and the
+    // caret position nearest to `x`.
+    float caretX(std::wstring_view text, const TextStyle &style, size_t index) const;
+    size_t caretIndexAt(std::wstring_view text, const TextStyle &style, float x) const;
 
 private:
     void createDevice();

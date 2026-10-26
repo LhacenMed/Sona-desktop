@@ -64,7 +64,7 @@ public:
     }
 
     bool takesMouse() const override { return true; }
-    bool showsHandCursor() const override { return true; }
+    Cursor cursor() const override { return Cursor::Hand; }
 
     void paint(Canvas &canvas) override
     {
@@ -114,7 +114,7 @@ public:
     }
 
     bool takesMouse() const override { return true; }
-    bool showsHandCursor() const override { return true; }
+    Cursor cursor() const override { return Cursor::Hand; }
 
     void paint(Canvas &canvas) override
     {

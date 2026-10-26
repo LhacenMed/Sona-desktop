@@ -1,30 +1,56 @@
 #include "onboarding/ShortcutsPage.h"
 
+#include <array>
+#include <string>
+
+#include "commands/CommandRegistry.h"
 #include "onboarding/KeyCap.h"
 #include "style/Theme.h"
 #include "widgets/Label.h"
-#include "widgets/Row.h"
+#include "widgets/Stack.h"
 
 namespace {
 
 constexpr TextStyle guideStyle{.size = 16, .weight = DWRITE_FONT_WEIGHT_LIGHT};
 
-// A shortcut's name and its keys, with "/" between alternative bindings.
+// A line of the guide: its title and the one or two commands whose keys it shows.
+struct GuideLine
+{
+    const wchar_t *title;
+    std::vector<CommandId> commands;
+};
+
+const std::array<GuideLine, 12> guideLines{{
+    {L"Play / Pause", {CommandId::PlayPause}},
+    {L"Seek Backward / Forward", {CommandId::SeekBackward, CommandId::SeekForward}},
+    {L"Previous / Next Item", {CommandId::PreviousItem, CommandId::NextItem}},
+    {L"Previous / Next Frame", {CommandId::PreviousFrame, CommandId::NextFrame}},
+    {L"Cycle Subtitle Track", {CommandId::CycleSubtitleTrack}},
+    {L"Cycle Audio Track", {CommandId::CycleAudioTrack}},
+    {L"Toggle Fullscreen", {CommandId::ToggleFullScreen}},
+    {L"Increase / Decrease Volume", {CommandId::VolumeUp, CommandId::VolumeDown}},
+    {L"Show / Hide Queue", {CommandId::ToggleQueue}},
+    {L"Show / Hide File Browser", {CommandId::ToggleFileBrowser}},
+    {L"Take a Snapshot", {CommandId::TakeSnapshot}},
+    {L"Record", {CommandId::Record}},
+}};
+
+// A line's title and each command's keys, with "/" between the commands.
 class ShortcutRow : public View
 {
 public:
-    explicit ShortcutRow(const ShortcutGroup &group)
-        : m_title(add<Label>(group.title, guideStyle, &Palette::fgA1))
+    ShortcutRow(const GuideLine &line, const CommandRegistry &commands)
+        : m_title(add<Label>(line.title, guideStyle, &Palette::fgA1))
         , m_bindings(add<Row>(10.0f))
     {
-        // Pairs of arrow and punctuation keys use narrower caps.
-        const bool compact = group.bindings.size() > 1;
-        for (size_t i = 0; i < group.bindings.size(); ++i) {
+        // Pairs of keys use narrower caps.
+        const bool compact = line.commands.size() > 1;
+        for (size_t i = 0; i < line.commands.size(); ++i) {
             if (i > 0)
                 m_bindings.add<Label>(L"/", guideStyle, &Palette::fgA1);
             auto &keys = m_bindings.add<Row>(4.0f);
-            for (const std::wstring &label : group.bindings[i].keyLabels)
-                keys.add<KeyCap>(label, compact);
+            for (const std::wstring &name : keyNames(commands.command(line.commands[i]).shortcuts.front()))
+                keys.add<KeyCap>(name, compact);
         }
     }
 
@@ -41,12 +67,12 @@ private:
 
 } // namespace
 
-ShortcutsPage::ShortcutsPage(const std::vector<ShortcutGroup> &groups)
+ShortcutsPage::ShortcutsPage(const CommandRegistry &commands)
 {
     m_heading = &add<Label>(L"Learn the basic keyboard shortcuts.", TextStyle{.size = 24, .align = TextAlign::Center},
                             &Palette::fgA1);
-    for (const ShortcutGroup &group : groups)
-        m_rows.push_back(&add<ShortcutRow>(group));
+    for (const GuideLine &line : guideLines)
+        m_rows.push_back(&add<ShortcutRow>(line, commands));
     m_footer = &add<Label>(L"Find the full list in the menu.", TextStyle{.size = 16, .lineHeight = 28}, &Palette::fgA3);
 }
 

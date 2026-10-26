@@ -6,21 +6,37 @@
 
 namespace {
 
+Color scaled(Color color, float factor)
+{
+    return {color.r * factor, color.g * factor, color.b * factor, color.a};
+}
+
 Palette makePalette(bool dark, const AccentColors &accent)
 {
+    const Color accentMain = dark ? accent.dark : accent.light;
+    const Color bgB1 = Color::hex(dark ? 0x0e0e0e : 0xe7e7e7);
     return {
-        .accentMain = dark ? accent.dark : accent.light,
+        .accentMain = accentMain,
+        // Accent/Dim and BG/Accent Dark are defined for orange in Dark only: 81% of the accent's
+        // brightness, and the accent at 6% over BG/B1, which reproduce them.
+        .accentDim = scaled(accentMain, 0.81f),
         .bgAccentBright = dark ? accent.darkDim : accent.lightDim,
+        .bgAccentDark = Color::mix(bgB1, accentMain, 0.06f),
+        .bgA2 = Color::hex(dark ? 0x1f1f1f : 0xbdbdbd),
         .bgA3 = Color::hex(dark ? 0x1b1b1b : 0xd5d5d5),
         .bgA4 = Color::hex(dark ? 0x191919 : 0xacacac),
-        .bgB1 = Color::hex(dark ? 0x0e0e0e : 0xe7e7e7),
+        .bgA5 = Color::hex(dark ? 0x151515 : 0x888888),
+        .bgB1 = bgB1,
+        .bgB1Transparent = dark ? Color::hex(0x0e0e0e, 0.95f) : Color::hex(0xe7e7e7, 0.8f),
         .bgB2 = Color::hex(dark ? 0x090909 : 0xdedede),
-        // FG/1, FG/2, FG/A1 and BG/A4 are not defined for Light in Figma; chosen to continue the Light foreground scale.
+        // FG/1, FG/2, FG/A1, FG/A4, BG/A2 and BG/A4 are not defined for Light in Figma; chosen to
+        // continue the Light scales.
         .fg1 = Color::hex(dark ? 0xeaeaea : 0x161616),
         .fg2 = Color::hex(dark ? 0xc6c6c6 : 0x2e2e2e),
         .fgA1 = Color::hex(dark ? 0x969696 : 0x3d3d3d),
         .fgA2 = Color::hex(dark ? 0x8f8f8f : 0x2e2e2e),
         .fgA3 = Color::hex(0x6b6b6b),
+        .fgA4 = Color::hex(dark ? 0x404040 : 0x9a9a9a),
         .fgB1 = Color::hex(0x161616),
         .dividerBright = Color::hex(dark ? 0x373737 : 0x9b9b9b),
         // BG/B2 in Dark, BG/A5 in Light.

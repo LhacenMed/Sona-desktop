@@ -3,10 +3,16 @@
 #include "graphics/Canvas.h"
 #include "style/Theme.h"
 
-void drawIcon(Canvas &canvas, std::wstring_view name, Point topLeft, Color color)
+void drawIcon(Canvas &canvas, std::wstring_view name, Point topLeft, Color color, float size)
 {
-    canvas.drawSvg(L"icons/" + std::wstring(name) + L".svg", {topLeft.x, topLeft.y, iconSize, iconSize},
-                   {{0x8F8F8F, color}});
+    canvas.drawSvg(L"icons/" + std::wstring(name) + L".svg", {topLeft.x, topLeft.y, size, size}, {{0x8F8F8F, color}});
+}
+
+void drawDuoIcon(Canvas &canvas, std::wstring_view name, Point topLeft, float size)
+{
+    const Palette &palette = canvas.palette();
+    canvas.drawSvg(L"icons/" + std::wstring(name) + L"-duo.svg", {topLeft.x, topLeft.y, size, size},
+                   {{0x8F8F8F, palette.fgA2}, {0xAB6314, palette.accentDim}, {0xD37918, palette.accentMain}});
 }
 
 IconView::IconView(std::wstring name, float padding)

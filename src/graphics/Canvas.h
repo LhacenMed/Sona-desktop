@@ -61,6 +61,8 @@ public:
     void strokeRoundedRect(const Rect &rect, float radius, float width, Color color);
     void fillCircle(Point center, float radius, Color color);
     void strokeCircle(Point center, float radius, float width, Color color);
+    // A Figma drop shadow under a rounded rectangle: `blur` is Figma's blur radius.
+    void drawShadow(const Rect &rect, float radius, Point offset, float blur, Color color);
     void drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color);
     // Draws an SVG from assets/ stretched to `rect`.
     void drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps = {});
@@ -73,6 +75,8 @@ private:
     GraphicsDevice &m_graphics;
     const Theme &m_theme;
     ID2D1DeviceContext5 *m_context = nullptr;
+    // Records the shapes that shadows are cast from.
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_recorder;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_brush;
     D2D1::Matrix3x2F m_transform = D2D1::Matrix3x2F::Identity();
     std::vector<D2D1::Matrix3x2F> m_savedTransforms;

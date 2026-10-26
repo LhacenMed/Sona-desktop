@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/Signal.h"
-#include "widgets/Row.h"
+#include "widgets/Stack.h"
 
 class IconButton;
 class Player;

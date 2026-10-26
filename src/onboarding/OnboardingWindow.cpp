@@ -1,6 +1,7 @@
 #include "onboarding/OnboardingWindow.h"
 
 #include <array>
+#include <functional>
 
 #include "graphics/Canvas.h"
 #include "onboarding/ShortcutsPage.h"
@@ -8,7 +9,7 @@
 #include "onboarding/WelcomePage.h"
 #include "settings/AppSettings.h"
 #include "style/Theme.h"
-#include "widgets/TextButton.h"
+#include "widgets/Button.h"
 
 namespace {
 
@@ -24,12 +25,12 @@ public:
 class OnboardingView : public View
 {
 public:
-    OnboardingView(Theme &theme, SettingsStore &settings, Player &player, const std::vector<ShortcutGroup> &shortcuts,
+    OnboardingView(Theme &theme, SettingsStore &settings, Player &player, const CommandRegistry &commands,
                    std::function<void()> finish)
         : m_dragBand(add<DragBand>())
-        , m_pages{&add<WelcomePage>(settings), &add<ThemePage>(theme, settings, player), &add<ShortcutsPage>(shortcuts)}
-        , m_back(add<TextButton>(L"Back", Size{100, 32}, buttonStyle, false))
-        , m_next(add<TextButton>(L"Next", Size{100, 32}, buttonStyle, true))
+        , m_pages{&add<WelcomePage>(settings), &add<ThemePage>(theme, settings, player), &add<ShortcutsPage>(commands)}
+        , m_back(add<Button>(L"Back", ButtonKind::Secondary, buttonStyle))
+        , m_next(add<Button>(L"Next", ButtonKind::Primary, buttonStyle))
     {
         m_back.setOnClick([this] { showPage(m_page - 1); });
         m_next.setOnClick([this, finish = std::move(finish)] {
@@ -67,28 +68,21 @@ private:
 
     DragBand &m_dragBand;
     std::array<View *, lastPage + 1> m_pages;
-    TextButton &m_back;
-    TextButton &m_next;
+    Button &m_back;
+    Button &m_next;
     int m_page = 0;
 };
 
 } // namespace
 
 OnboardingWindow::OnboardingWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player,
-                                   const std::vector<ShortcutGroup> &shortcuts, HWND owner, std::function<void()> closed)
+                                   const CommandRegistry &commands, HWND owner)
     : Window(graphics, theme)
-    , m_closed(std::move(closed))
 {
-    create(L"Welcome to " SONA_APP_NAME, {1090, 759}, {1090, 759}, false, owner);
-    setRoot(std::make_unique<OnboardingView>(theme, settings, player, shortcuts, [this, &settings] {
+    create(L"Welcome to " SONA_APP_NAME, {1090, 759}, {1090, 759}, WindowFrame::Fixed, owner);
+    setRoot(std::make_unique<OnboardingView>(theme, settings, player, commands, [this, &settings] {
         settings.set(AppSettings::onboardingCompleted, true);
         close();
     }));
     show(false);
-}
-
-void OnboardingWindow::closeRequested()
-{
-    m_closed();
-    Window::closeRequested();
 }

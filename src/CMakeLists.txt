@@ -1,12 +1,13 @@
 add_executable(sona WIN32
     app/main.cpp
     app/sona.manifest
+    commands/CommandRegistry.cpp
     core/Text.cpp
     graphics/Canvas.cpp
     graphics/GraphicsDevice.cpp
     graphics/WindowSurface.cpp
     maininterface/CaptionButton.cpp
-    maininterface/KeyboardShortcuts.cpp
+    maininterface/MainCommands.cpp
     maininterface/MainWindow.cpp
     maininterface/TitleBar.cpp
     onboarding/KeyCap.cpp
@@ -14,10 +15,14 @@ add_executable(sona WIN32
     onboarding/ShortcutsPage.cpp
     onboarding/ThemePage.cpp
     onboarding/WelcomePage.cpp
+    platform/Clipboard.cpp
     platform/FileDialogs.cpp
+    platform/KeyChord.cpp
     platform/KnownFolders.cpp
+    platform/PopupWindow.cpp
     platform/Resources.cpp
     platform/SystemTheme.cpp
+    platform/Timer.cpp
     platform/Window.cpp
     playback/Player.cpp
     player/ControlBar.cpp
@@ -29,12 +34,26 @@ add_executable(sona WIN32
     player/VolumeBar.cpp
     settings/SettingsStore.cpp
     style/Theme.cpp
+    widgets/Animation.cpp
+    widgets/Button.cpp
+    widgets/DialogWindow.cpp
+    widgets/Dropdown.cpp
     widgets/Icon.cpp
     widgets/IconButton.cpp
     widgets/Label.cpp
-    widgets/Row.cpp
-    widgets/TextButton.cpp
+    widgets/ListRow.cpp
+    widgets/Overlay.cpp
+    widgets/Popover.cpp
+    widgets/ScrollView.cpp
+    widgets/Segmented.cpp
+    widgets/Slider.cpp
+    widgets/Stack.cpp
+    widgets/Tabs.cpp
+    widgets/TextField.cpp
+    widgets/Toggle.cpp
     widgets/View.cpp
+    # The widget gallery (sona.exe --gallery), for checking the toolkit against Figma.
+    $<$<CONFIG:Debug>:gallery/GalleryWindow.cpp>
 )
 
 # The icon and the version info Windows shows as the app's name (e.g. in "Open with").
@@ -62,11 +81,12 @@ target_compile_definitions(sona PRIVATE
     SONA_APP_NAME=L"${SONA_APP_NAME}"
     SONA_PUBLISHER=L"${SONA_PUBLISHER}"
     SONA_APP_USER_MODEL_ID=L"${SONA_APP_USER_MODEL_ID}"
+    $<$<CONFIG:Debug>:SONA_GALLERY>
 )
 
 target_compile_options(sona PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /MP)
 
-target_link_libraries(sona PRIVATE libvlc d3d11 dxgi d2d1 dwrite dcomp dwmapi shcore shlwapi)
+target_link_libraries(sona PRIVATE libvlc d3d11 dxgi d2d1 dwrite dcomp dwmapi dxguid imm32 shcore shlwapi)
 
 # The libVLC runtime next to the executable, so it runs from the build folder.
 add_custom_command(TARGET sona POST_BUILD

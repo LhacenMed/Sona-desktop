@@ -25,8 +25,7 @@ void CaptionButton::setGlyph(wchar_t glyph)
 void CaptionButton::paint(Canvas &canvas)
 {
     const Palette &palette = canvas.palette();
-    if (isPressed() || isHovered())
-        canvas.fillRect(bounds(), isPressed() ? palette.pressedOverlay : palette.hoverOverlay);
+    canvas.fillRect(bounds(), isPressed() ? palette.pressedOverlay : palette.hoverOverlay.faded(hoverAmount()));
     const TextStyle glyphStyle{.size = m_glyphSize, .align = TextAlign::Center, .font = TextFont::Icons};
     const Window *host = window();
     canvas.drawText(std::wstring_view(&m_glyph, 1), bounds(), glyphStyle,

@@ -13,7 +13,7 @@ ControlBar::ControlBar(Player &player)
     : Row(20)
     , m_player(player)
 {
-    setPadding(20, 20);
+    setPadding({.left = 20, .right = 20});
 
     auto &transport = add<Row>(8.0f);
     transport.add<IconButton>(L"previous", 3.0f, 2.0f);

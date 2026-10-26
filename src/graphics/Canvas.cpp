@@ -1,5 +1,6 @@
 #include "graphics/Canvas.h"
 
+#include <d2d1effects.h>
 #include <Shlwapi.h>
 
 #include <format>
@@ -38,6 +39,8 @@ void Canvas::bind(ID2D1DeviceContext5 *context)
     m_svgDocuments.clear();
     m_brush.Reset();
     check(context->CreateSolidColorBrush(D2D1::ColorF(0, 0), &m_brush));
+    m_recorder.Reset();
+    check(m_graphics.d2d()->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_recorder));
 }
 
 void Canvas::beginFrame()
@@ -135,6 +138,29 @@ void Canvas::fillCircle(Point center, float radius, Color color)
 void Canvas::strokeCircle(Point center, float radius, float width, Color color)
 {
     m_context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(center.x, center.y), radius, radius), brush(color), width);
+}
+
+void Canvas::drawShadow(const Rect &rect, float radius, Point offset, float blur, Color color)
+{
+    // The shape, recorded on a separate context, cast through Direct2D's shadow effect.
+    ComPtr<ID2D1CommandList> shape;
+    check(m_recorder->CreateCommandList(&shape));
+    m_recorder->SetTarget(shape.Get());
+    m_recorder->BeginDraw();
+    ComPtr<ID2D1SolidColorBrush> black;
+    check(m_recorder->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0), &black));
+    m_recorder->FillRoundedRectangle(D2D1::RoundedRect(toD2D(rect), radius, radius), black.Get());
+    check(m_recorder->EndDraw());
+    m_recorder->SetTarget(nullptr);
+    check(shape->Close());
+
+    ComPtr<ID2D1Effect> shadow;
+    check(m_context->CreateEffect(CLSID_D2D1Shadow, &shadow));
+    shadow->SetInput(0, shape.Get());
+    // Figma's blur radius is twice the Gaussian's standard deviation, as in CSS.
+    check(shadow->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, blur / 2));
+    check(shadow->SetValue(D2D1_SHADOW_PROP_COLOR, D2D1::Vector4F(color.r, color.g, color.b, color.a)));
+    m_context->DrawImage(shadow.Get(), D2D1::Point2F(offset.x, offset.y));
 }
 
 void Canvas::drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color)

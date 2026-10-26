@@ -3,7 +3,7 @@
 #include <string>
 
 #include "core/Signal.h"
-#include "widgets/Row.h"
+#include "widgets/Stack.h"
 
 class CaptionButton;
 class Label;

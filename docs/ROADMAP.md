@@ -104,7 +104,9 @@ Setup.
 | --- | --- | --- |
 | Window | Custom title bar joined with Windows' own caption buttons (Snap Layouts, animations), stand-in measurement of the button size, maximized/fullscreen handling, DPI, open animation, no white flash | `platform/Window`, `maininterface/TitleBar`, `CaptionButton` |
 | Rendering | One shared D3D11/D2D/DComp device, per-window swap chains drawn above the libVLC child window, SVG icons with colour swaps, Inter from resources | `graphics/` |
-| Toolkit | `View` (tree, hit testing, hover/press), `Row` (horizontal layout), `Label` (elision), `Icon`, `IconButton`/`IconWrapper`, `TextButton` | `widgets/` |
+| Toolkit | `View` (tree, hit testing, hover/press, focus, keys, wheel, tooltips), `Row`/`Column` (padding, alignment), `ScrollView`, overlay layer with popovers and tooltips, popup windows, `Animation` and `Timer`, `Label`, `Icon` (mono and two-tone), `IconButton`/`IconWrapper`, `Button` (primary, secondary, neutral), `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField` (selection, clipboard, undo, IME), `DialogWindow` (modal, owned) | `widgets/`, `platform/` |
+| Commands | Registry of every action and its shortcuts; keyboard handling and the onboarding guide read it (keys decided in D3) | `commands/`, `maininterface/MainCommands` |
+| Widget gallery | Every widget on one page, Debug builds only: `sona.exe --gallery` | `gallery/` |
 | Design tokens | Dark/Light palettes, 9 accent colours, theme mode (Light/Dark/System) | `style/Theme` |
 | Settings | Registry store; 4 settings (onboardingCompleted, theme, accentIndex, mediaFolder) | `settings/` |
 | Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close | `playback/Player` |
@@ -119,7 +121,9 @@ Everything in [section 5](#5-ui-specification) beyond the above:
   the settings window
 - music view, miniplayer, customize player, profiles, light-theme review
 
-Most of it needs toolkit pieces that don't exist yet ([section 6](#6-system-architecture-to-add)).
+Toolkit pieces still missing ([section 6](#6-system-architecture-to-add)): `Menu`, `InfoIcon`,
+`ColorField`, `Thumbnail`, drag and drop, images, Tab key focus traversal, and the slider's paired
+value field (a `Slider` next to a `TextField`, composed where P5 needs it).
 
 ### Known deviations from Figma (intentional)
 
@@ -447,8 +451,7 @@ Album, Track Number, URI, Disc Number (ascending/descending).
 | Open Media | › |
 | Quit Sona | Ctrl+Q |
 
-Ctrl+C for capture conflicts with copy, and C/F/N overlap other bindings. Resolve this in the
-commands registry (6.1) and confirm with the user (D3).
+The keys follow decision D3: one map for the menus, the keyboard and the guide.
 
 **On-screen message:** when a shortcut runs, show the action and the key that triggered it
 (Settings > Subtitles > On-Screen Messages).
@@ -667,7 +670,8 @@ Each phase ends with something visible and checkable.
 | **P10 Customize and streaming** | 5.10, 6.8 | Customize Player drag-and-drop editor; profiles with layouts; convert, stream, record, casting | A rearranged layout persists per profile; a file casts to a device. |
 | **P11 Polish** | all | Light theme pass, accessibility (UI Automation names, keyboard focus), performance (startup < 300 ms, idle memory), installer associations | Both themes match Figma; Narrator reads the controls. |
 
-Progress: P0 (foundation, playback, onboarding, packaging) is done. Next: **P1**.
+Progress: P0 (foundation, playback, onboarding, packaging) and P1 (toolkit and commands) are done.
+Next: **P2**.
 
 ---
 
@@ -679,7 +683,7 @@ Ask the user before building anything that depends on these:
 | --- | --- | --- | --- |
 | D1 | App data store | SQLite (vendored) · JSON files | SQLite |
 | D2 | OpenSubtitles | Official REST API (needs a key and user login) · leave out | Ask the user for an API key |
-| D3 | Keyboard map conflicts (Ctrl+C capture vs copy, Ctrl+F folder vs find, B bookmarks vs audio cycle) | Follow Figma · adjust | Propose a conflict-free map in P1 |
+| D3 | Keyboard map conflicts (Ctrl+C capture vs copy, Ctrl+F folder vs find, B bookmarks vs audio cycle) | **Decided:** the menus' keys everywhere: Previous/Next Item P / N (the guide shows them), Record Shift+R, Ctrl+F Open Folder and Ctrl+E library search; a focused text field keeps Ctrl+C/V/X/A/Z, so Ctrl+C is Capture Device elsewhere; B cycles audio and Ctrl+B adds a bookmark | — |
 | D4 | Features libVLC 3 can't do (reverse playback, previous frame) | Hide · show disabled with a reason | Show disabled with a reason |
 | D5 | Fullscreen button position | Title bar (as built and as Figma) · control bar | Keep it in the title bar; customize can move it |
 | D6 | libVLC 4 | Stay on 3.0.x · move when stable | Stay on 3; keep everything behind `playback/` |

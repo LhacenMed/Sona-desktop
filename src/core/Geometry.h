@@ -15,6 +15,15 @@ struct Size
     float height = 0;
 };
 
+// Space kept inside a view's edges.
+struct Insets
+{
+    float left = 0;
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+};
+
 struct Rect
 {
     float x = 0;

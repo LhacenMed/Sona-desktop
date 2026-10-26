@@ -1,12 +1,36 @@
 #include "widgets/View.h"
 
+#include <algorithm>
+
 #include "graphics/Canvas.h"
 #include "platform/Window.h"
+
+View &View::add(std::unique_ptr<View> child)
+{
+    child->m_parent = this;
+    m_children.push_back(std::move(child));
+    return *m_children.back();
+}
+
+void View::remove(View &child)
+{
+    // The window lets go of the child's views first (hover, press, focus).
+    if (Window *host = window())
+        host->viewRemoved(child);
+    std::erase_if(m_children, [&child](const auto &entry) { return entry.get() == &child; });
+    invalidate();
+}
 
 void View::setFrame(const Rect &frame)
 {
     m_frame = frame;
     layout();
+}
+
+void View::moveTo(Point position)
+{
+    m_frame.x = position.x;
+    m_frame.y = position.y;
 }
 
 void View::setVisible(bool visible)
@@ -51,7 +75,13 @@ Point View::mapFromWindow(Point point) const
     return point;
 }
 
-void View::invalidate()
+Rect View::mapToWindow(const Rect &rect) const
+{
+    const Point origin = mapFromWindow({0, 0});
+    return {rect.x - origin.x, rect.y - origin.y, rect.width, rect.height};
+}
+
+void View::invalidate() const
 {
     if (Window *host = window())
         host->invalidate();

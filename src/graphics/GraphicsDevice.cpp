@@ -64,8 +64,10 @@ void GraphicsDevice::createDevice()
                                 nullptr, nullptr));
     }
 
-    ComPtr<IDXGIDevice> dxgiDevice;
+    ComPtr<IDXGIDevice1> dxgiDevice;
     check(m_d3d.As(&dxgiDevice));
+    // One frame in flight instead of three, so what's drawn follows the pointer without lag.
+    check(dxgiDevice->SetMaximumFrameLatency(1));
     ComPtr<IDXGIAdapter> adapter;
     check(dxgiDevice->GetAdapter(&adapter));
     check(adapter->GetParent(IID_PPV_ARGS(&m_dxgiFactory)));
@@ -98,7 +100,9 @@ IDWriteTextFormat *GraphicsDevice::textFormat(const TextStyle &style) const
                                                              : m_iconFontFamily;
     check(m_dwrite->CreateTextFormat(family, app ? m_fonts.Get() : nullptr, style.weight, DWRITE_FONT_STYLE_NORMAL,
                                      DWRITE_FONT_STRETCH_NORMAL, style.size, L"en-us", &format));
-    format->SetTextAlignment(style.align == TextAlign::Center ? DWRITE_TEXT_ALIGNMENT_CENTER : DWRITE_TEXT_ALIGNMENT_LEADING);
+    format->SetTextAlignment(style.align == TextAlign::Center     ? DWRITE_TEXT_ALIGNMENT_CENTER
+                             : style.align == TextAlign::Trailing ? DWRITE_TEXT_ALIGNMENT_TRAILING
+                                                                  : DWRITE_TEXT_ALIGNMENT_LEADING);
     format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     format->SetWordWrapping(style.wrap ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
     if (style.elide) {
@@ -126,4 +130,27 @@ Size GraphicsDevice::measureText(std::wstring_view text, const TextStyle &style,
     DWRITE_TEXT_METRICS metrics{};
     check(layoutText(text.empty() ? L" " : text, style, {maxWidth, 100000})->GetMetrics(&metrics));
     return {text.empty() ? 0 : metrics.widthIncludingTrailingWhitespace, metrics.height};
+}
+
+float GraphicsDevice::caretX(std::wstring_view text, const TextStyle &style, size_t index) const
+{
+    if (index == 0)
+        return 0;
+    // The trailing edge of the character before the caret.
+    FLOAT x = 0;
+    FLOAT y = 0;
+    DWRITE_HIT_TEST_METRICS metrics{};
+    check(layoutText(text, style, {100000, 100000})->HitTestTextPosition(static_cast<UINT32>(index - 1), TRUE, &x, &y, &metrics));
+    return x;
+}
+
+size_t GraphicsDevice::caretIndexAt(std::wstring_view text, const TextStyle &style, float x) const
+{
+    if (text.empty())
+        return 0;
+    BOOL trailing = FALSE;
+    BOOL inside = FALSE;
+    DWRITE_HIT_TEST_METRICS metrics{};
+    check(layoutText(text, style, {100000, 100000})->HitTestPoint(x, 0, &trailing, &inside, &metrics));
+    return metrics.textPosition + (trailing ? metrics.length : 0);
 }

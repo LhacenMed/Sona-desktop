@@ -16,6 +16,16 @@ struct Color
         return {((rgb >> 16) & 0xff) / 255.0f, ((rgb >> 8) & 0xff) / 255.0f, (rgb & 0xff) / 255.0f, alpha};
     }
 
+    // The color `amount` of the way from `from` to `to`.
+    static constexpr Color mix(Color from, Color to, float amount)
+    {
+        const auto at = [amount](float start, float end) { return start + (end - start) * amount; };
+        return {at(from.r, to.r), at(from.g, to.g), at(from.b, to.b), at(from.a, to.a)};
+    }
+
+    // The same color with its opacity scaled by `amount`.
+    constexpr Color faded(float amount) const { return {r, g, b, a * amount}; }
+
     // Back to 0xRRGGBB, dropping alpha.
     constexpr std::uint32_t rgb() const { return (channel(r) << 16) | (channel(g) << 8) | channel(b); }
 
