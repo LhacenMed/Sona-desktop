@@ -32,12 +32,15 @@ class MenuRow : public View
 public:
     MenuRow(Menu &menu, int index) : m_menu(menu), m_index(index) {}
 
-    bool takesMouse() const override { return true; }
+    // A disabled row takes no part in the pointer, as in native menus: no highlight, no click.
+    bool takesMouse() const override { return m_menu.isEnabled(m_menu.m_items[m_index]); }
 
     void hoverChanged() override
     {
         if (isHovered())
             m_menu.rowHovered(m_index);
+        else
+            m_menu.rowLeft(m_index);
         invalidate();
     }
 
@@ -146,16 +149,16 @@ bool Menu::keyPressed(KeyChord chord)
     const int count = static_cast<int>(m_rows.size());
     switch (chord.key) {
     case VK_UP:
-        m_highlighted = (std::max(m_highlighted, 0) + count - 1) % count;
+        m_highlighted = enabledRowAfter(m_highlighted < 0 ? 0 : m_highlighted, -1);
         break;
     case VK_DOWN:
-        m_highlighted = (m_highlighted + 1) % count;
+        m_highlighted = enabledRowAfter(m_highlighted < 0 ? count - 1 : m_highlighted, 1);
         break;
     case VK_HOME:
-        m_highlighted = 0;
+        m_highlighted = enabledRowAfter(count - 1, 1);
         break;
     case VK_END:
-        m_highlighted = count - 1;
+        m_highlighted = enabledRowAfter(0, -1);
         break;
     case VK_RIGHT:
         if (m_highlighted >= 0 && !m_items[m_highlighted].command)
@@ -202,6 +205,25 @@ void Menu::activate(int index, bool fromKeyboard)
     commands.run(command);
 }
 
+void Menu::rowLeft(int index)
+{
+    if (index != m_highlighted || (index == m_submenuRow && window()->hasPopup()))
+        return;
+    m_highlighted = -1;
+    m_submenuTimer.stop();
+}
+
+int Menu::enabledRowAfter(int from, int direction) const
+{
+    const int count = static_cast<int>(m_rows.size());
+    for (int step = 1; step <= count; ++step) {
+        const int index = ((from + direction * step) % count + count) % count;
+        if (isEnabled(m_items[index]))
+            return index;
+    }
+    return from;
+}
+
 void Menu::openSubmenu(int index, bool fromKeyboard)
 {
     m_submenuTimer.stop();
@@ -211,6 +233,7 @@ void Menu::openSubmenu(int index, bool fromKeyboard)
     // Beside the row, its first row level with this one.
     const Rect row = m_rows[index]->mapToWindow(m_rows[index]->bounds());
     const Rect anchor{row.x - menuPadding, row.y - menuPadding, row.width + 2 * menuPadding, row.height + 2 * menuPadding};
+    m_submenuRow = index;
     open(*window(), anchor, PopupPlacement::Beside, item.submenu, m_commands, 0, fromKeyboard);
 }
 

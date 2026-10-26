@@ -51,6 +51,10 @@ private:
     // Highlighted rows: the hovered one, or the keyboard's while the pointer is on none.
     bool isLit(int index) const;
     void rowHovered(int index);
+    // The pointer left the row: it's no longer highlighted, unless its submenu is open.
+    void rowLeft(int index);
+    // The next enabled row `direction` (1 or -1) rows on from `from`, wrapping; `from` when none.
+    int enabledRowAfter(int from, int direction) const;
     // Runs a command row, or opens a submenu row.
     void activate(int index, bool fromKeyboard);
     void openSubmenu(int index, bool fromKeyboard);
@@ -63,5 +67,7 @@ private:
     float m_minimumWidth;
     std::vector<MenuRow *> m_rows;
     int m_highlighted;
+    // The row whose submenu is open (while the window has a popup).
+    int m_submenuRow = -1;
     Timer m_submenuTimer;
 };
