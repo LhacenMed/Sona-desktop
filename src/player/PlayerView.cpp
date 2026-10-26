@@ -77,9 +77,6 @@ void PlayerView::toggleQueue()
     host.closePopup();
     if (wasOpen)
         return;
-    // A panel sits against both bars, so they come in with it and stay while it's open.
-    m_titleReveal.show();
-    m_controlsReveal.show();
     const float top = m_titleBar.frame().height + panelMargin;
     const float height = std::max(0.0f, frame().height - controlBarHeight - panelMargin - top);
     const Rect panel = mapToWindow({frame().width - panelMargin - QueuePanel::width, top, QueuePanel::width, height});

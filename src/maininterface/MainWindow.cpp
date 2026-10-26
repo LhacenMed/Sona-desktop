@@ -55,6 +55,12 @@ void MainWindow::showOnboarding()
     openWindow<OnboardingWindow>(graphics(), theme(), m_playerView->barContext(), hwnd());
 }
 
+void MainWindow::openMedia(const std::vector<std::wstring> &opened)
+{
+    setBarsAutoHide(true);
+    m_queue.open(opened);
+}
+
 bool MainWindow::barsAutoHide() const
 {
     return m_playerView->barsAutoHide();
@@ -118,7 +124,7 @@ void MainWindow::filesDropped(HDROP drop)
     if (isQueueOpen())
         m_queue.append(paths);
     else
-        m_queue.open(paths);
+        openMedia(paths);
 }
 
 void MainWindow::closeRequested()
@@ -136,12 +142,12 @@ void MainWindow::destroyed()
 void MainWindow::openFiles()
 {
     chooseFiles(*this, m_settings.get(AppSettings::mediaFolder), mediaFileType(),
-                [this](std::vector<std::wstring> files) { m_queue.open(files); });
+                [this](std::vector<std::wstring> files) { openMedia(files); });
 }
 
 void MainWindow::openFolder()
 {
-    chooseFolder(*this, m_settings.get(AppSettings::mediaFolder), [this](std::wstring folder) { m_queue.open({folder}); });
+    chooseFolder(*this, m_settings.get(AppSettings::mediaFolder), [this](std::wstring folder) { openMedia({folder}); });
 }
 
 void MainWindow::updateTitle()

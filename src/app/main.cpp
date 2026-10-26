@@ -58,12 +58,11 @@ void runPlayer(const std::wstring &media)
     GraphicsDevice graphics;
     MainWindow window(graphics, theme, settings, player, queue, bookmarks);
 
-    // Launching with media opens a player: maximized, its bars auto-hiding over the video. An empty
-    // launch opens at the default size with the bars fixed.
-    window.setBarsAutoHide(!media.empty());
-    window.show(!media.empty());
+    // Launching with media opens a player, maximized. An empty launch opens at the default size with
+    // the bars fixed.
     if (!media.empty())
-        queue.open({media});
+        window.openMedia({media});
+    window.show(!media.empty());
     if (!settings.get(AppSettings::onboardingCompleted))
         window.showOnboarding();
     runMessageLoop();

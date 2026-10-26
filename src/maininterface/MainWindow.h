@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "commands/CommandRegistry.h"
 #include "core/Signal.h"
@@ -24,6 +25,8 @@ public:
 
     // First-run onboarding, modal over this window.
     void showOnboarding();
+    // Plays the media in `opened` in place of the queue, the bars auto-hiding over it.
+    void openMedia(const std::vector<std::wstring> &opened);
     // Plays the chosen files, or the media in the chosen folder, in place of the queue.
     void openFiles();
     void openFolder();

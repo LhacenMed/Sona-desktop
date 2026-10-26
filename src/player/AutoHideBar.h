@@ -33,7 +33,7 @@ public:
     // Follows the pointer at `now`: its distance from the bar's edge of the window (none when it's
     // outside the window), for a bar `size` deep when shown.
     void follow(std::optional<float> distanceFromEdge, float size, Clock::time_point now);
-    // Shows the bar whatever the pointer does (auto-hide off, nothing to watch, a panel open).
+    // Shows the bar whatever the pointer does (auto-hide off, nothing to watch).
     void show();
 
 private:

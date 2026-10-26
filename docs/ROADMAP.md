@@ -111,7 +111,7 @@ Setup.
 | Settings | Registry store; 5 settings (onboardingCompleted, theme, accentIndex, mediaFolder, showRemainingTime) | `settings/` |
 | Data | SQLite (vendored in `third_party/sqlite`) in `%LOCALAPPDATA%\Sona\sona.db` with versioned migrations; bookmarks per media | `data/` |
 | Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close, chapters, durations read ahead; the queue (play order, repeat off/all/one, shuffle, move, sort, remove), the one place media is opened from; folders expand to their media in Explorer's order | `playback/Player`, `Queue`, `MediaFiles` |
-| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on by default when opened with media), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop (into the queue while it's open), "Open with", Open File(s) and Open Folder; the queue panel (Queue, Bookmarks, Chapters tabs) docked over the video, its button active while it's open; a click on a row plays it or jumps to it; bookmarks marked on the seek bar (hover for the name, click to jump) | `player/`, `maininterface/` |
+| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on whenever media is opened), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop (into the queue while it's open), "Open with", Open File(s) and Open Folder; the queue panel (Queue, Bookmarks, Chapters tabs) docked over the video, its button active while it's open; a click on a row plays it or jumps to it; bookmarks marked on the seek bar (hover for the name, click to jump) | `player/`, `maininterface/` |
 | Onboarding | Welcome + media folder, theme + accent with live preview, shortcuts guide | `onboarding/` |
 | Packaging | Release build, libVLC deploy with plugin cache, per-user installer | `cmake/`, `platform/windows/` |
 
@@ -247,8 +247,8 @@ Each surface below lists what it contains, how it behaves and the Figma frames t
 - **Windows buttons:** minimize, maximize, close.
 
 **Auto-hide** (built): one switch. Hide UI (Ctrl+\\, right-click menu) turns it on and Show UI turns
-it off. It starts on when the window opens to play media ("Open with", a file on the command line)
-and off for an empty launch, and works the same windowed, maximized and in full screen.
+it off. It's off for an empty launch and turns on whenever media is opened ("Open with", Open File(s),
+Open Folder, a drop), and works the same windowed, maximized and in full screen.
 
 - Off, the bars stay fixed with the video between them (`Player 247:445`).
 - On, the video fills the window and the bars sit over it, each auto-hiding on its own edge
