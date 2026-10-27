@@ -27,6 +27,7 @@ add_executable(sona WIN32
     platform/SystemTheme.cpp
     platform/Timer.cpp
     platform/Window.cpp
+    platform/WorkerThread.cpp
     playback/MediaFiles.cpp
     playback/Player.cpp
     playback/Queue.cpp

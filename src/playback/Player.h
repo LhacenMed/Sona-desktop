@@ -3,17 +3,14 @@
 #include <windows.h>
 
 #include <atomic>
-#include <condition_variable>
-#include <cstdint>
-#include <deque>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
+#include "core/Picture.h"
 #include "core/Signal.h"
+#include "platform/WorkerThread.h"
 
 struct libvlc_instance_t;
 struct libvlc_media_player_t;
@@ -27,14 +24,6 @@ struct Chapter
     double time;
 
     bool operator==(const Chapter &) const = default;
-};
-
-// A picture of the playing media, small: 32-bit BGR pixels, top row first.
-struct PreviewFrame
-{
-    int width = 0;
-    int height = 0;
-    std::vector<std::uint32_t> pixels;
 };
 
 // The playback engine: owns libVLC and mirrors the player's state for the UI. libVLC is the single
@@ -82,7 +71,8 @@ public:
     // and previewChanged says its picture, preview(), arrived.
     void preparePreview();
     void previewAt(double seconds);
-    const PreviewFrame &preview() const { return m_preview; }
+    // A picture of the moment, small.
+    const Picture &preview() const { return m_preview; }
     void setVolume(int percent);
     void nextFrame();
     void cycleSubtitleTrack();
@@ -113,12 +103,8 @@ private:
     static void *previewLock(void *player, void **planes);
     static void previewDisplay(void *player, void *picture);
     static void onParsed(const libvlc_event_t *event, void *request);
-    static LRESULT CALLBACK messageProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-    void runEngine();
     void startEngine();
-    void post(std::function<void()> command);
-    void runOnUiThread(std::function<void()> task);
     void handleEvent(int type, int videoOutputCount);
     void sync();
     void applyAudio();
@@ -130,19 +116,13 @@ private:
     // Lets go of a duration request's media once it has been read, or when the engine stops.
     void releaseDurationRequest(DurationRequest *request);
 
-    HWND m_messageWindow = nullptr;
-    std::thread m_engine;
-    std::mutex m_mutex;
-    std::condition_variable m_wake;
-    std::deque<std::function<void()>> m_commands;
-    bool m_quit = false;
     // Created and released on the engine thread.
     libvlc_instance_t *m_vlc = nullptr;
     std::atomic<libvlc_media_player_t *> m_player = nullptr;
     std::atomic<libvlc_media_player_t *> m_previewPlayer = nullptr;
     std::wstring m_previewMedia;
     // Decoded on libVLC's thread, then handed to the UI thread as m_preview.
-    PreviewFrame m_previewDecoding;
+    Picture m_previewDecoding;
     std::vector<std::unique_ptr<DurationRequest>> m_durationRequests;
     // Only the latest target of a seek or preview is sent: one command is queued at a time.
     std::atomic<long long> m_seekTarget = 0;
@@ -163,5 +143,7 @@ private:
     // From open until the media plays (or fails), with the duration reads waiting for it.
     bool m_opening = false;
     std::vector<std::pair<std::wstring, std::function<void(double)>>> m_waitingDurations;
-    PreviewFrame m_preview;
+    Picture m_preview;
+    // Last, so it ends (running the commands still queued) before the state they use goes.
+    WorkerThread m_engine;
 };

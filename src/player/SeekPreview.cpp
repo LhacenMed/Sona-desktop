@@ -37,7 +37,7 @@ void SeekPreview::paint(Canvas &canvas)
     canvas.fillSurface(bounds(), Surfaces::thumbnail);
     canvas.fillRoundedRect(pictureBox, pictureRadius, palette.bgB2);
     // The picture fits the box, centred, whatever the video's shape.
-    if (const PreviewFrame &frame = m_player.preview(); frame.width > 0) {
+    if (const Picture &frame = m_player.preview(); frame.width > 0) {
         const float scale = std::min(pictureBox.width / frame.width, pictureBox.height / frame.height);
         const Size size{frame.width * scale, frame.height * scale};
         canvas.pushRoundedClip(pictureBox, pictureRadius);

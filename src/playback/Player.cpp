@@ -15,8 +15,6 @@
 
 namespace {
 
-constexpr UINT uiTaskMessage = WM_APP + 1;
-
 constexpr libvlc_event_e watchedEvents[] = {
     libvlc_MediaPlayerOpening, libvlc_MediaPlayerPlaying,      libvlc_MediaPlayerPaused,
     libvlc_MediaPlayerStopped, libvlc_MediaPlayerEndReached,   libvlc_MediaPlayerEncounteredError,
@@ -61,22 +59,12 @@ struct Player::DurationRequest
 
 Player::Player()
 {
-    static const ATOM messageClass = [] {
-        WNDCLASSW description{};
-        description.lpfnWndProc = messageProc;
-        description.hInstance = GetModuleHandleW(nullptr);
-        description.lpszClassName = L"SonaPlayerEvents";
-        return RegisterClassW(&description);
-    }();
-    m_messageWindow = CreateWindowExW(0, MAKEINTATOM(messageClass), nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                                      GetModuleHandleW(nullptr), nullptr);
-    m_engine = std::thread([this] { runEngine(); });
-    post([this] { startEngine(); });
+    m_engine.post([this] { startEngine(); });
 }
 
 Player::~Player()
 {
-    post([this] {
+    m_engine.post([this] {
         if (libvlc_media_player_t *player = m_player.exchange(nullptr)) {
             libvlc_event_manager_t *events = libvlc_media_player_event_manager(player);
             for (const libvlc_event_e event : watchedEvents)
@@ -93,30 +81,6 @@ Player::~Player()
         if (m_vlc)
             libvlc_release(m_vlc);
     });
-    {
-        const std::lock_guard lock(m_mutex);
-        m_quit = true;
-    }
-    m_wake.notify_one();
-    m_engine.join();
-    DestroyWindow(m_messageWindow);
-}
-
-void Player::runEngine()
-{
-    for (;;) {
-        std::function<void()> command;
-        {
-            std::unique_lock lock(m_mutex);
-            m_wake.wait(lock, [this] { return m_quit || !m_commands.empty(); });
-            // Quits only once every command has run.
-            if (m_commands.empty())
-                return;
-            command = std::move(m_commands.front());
-            m_commands.pop_front();
-        }
-        command();
-    }
 }
 
 void Player::startEngine()
@@ -125,7 +89,7 @@ void Player::startEngine()
     m_vlc = libvlc_new(static_cast<int>(std::size(arguments)), arguments);
     libvlc_media_player_t *player = m_vlc ? libvlc_media_player_new(m_vlc) : nullptr;
     if (!player) {
-        runOnUiThread([] {
+        m_engine.runOnUiThread([] {
             MessageBoxW(nullptr, L"The playback engine (libVLC) could not be loaded.", SONA_APP_NAME, MB_ICONERROR);
         });
         return;
@@ -145,39 +109,13 @@ void Player::startEngine()
     }
 }
 
-void Player::post(std::function<void()> command)
-{
-    {
-        const std::lock_guard lock(m_mutex);
-        m_commands.push_back(std::move(command));
-    }
-    m_wake.notify_one();
-}
-
-void Player::runOnUiThread(std::function<void()> task)
-{
-    // messageProc takes ownership of the task on the UI thread.
-    auto *posted = new std::function<void()>(std::move(task));
-    if (!PostMessageW(m_messageWindow, uiTaskMessage, 0, reinterpret_cast<LPARAM>(posted)))
-        delete posted;
-}
-
-LRESULT CALLBACK Player::messageProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    if (message != uiTaskMessage)
-        return DefWindowProcW(hwnd, message, wParam, lParam);
-    const std::unique_ptr<std::function<void()>> task(reinterpret_cast<std::function<void()> *>(lParam));
-    (*task)();
-    return 0;
-}
-
 void Player::onEvent(const libvlc_event_t *event, void *opaque)
 {
     // Runs on a libVLC thread.
     auto *self = static_cast<Player *>(opaque);
     const int type = event->type;
     const int videoOutputCount = type == libvlc_MediaPlayerVout ? event->u.media_player_vout.new_count : 0;
-    self->runOnUiThread([self, type, videoOutputCount] { self->handleEvent(type, videoOutputCount); });
+    self->m_engine.runOnUiThread([self, type, videoOutputCount] { self->handleEvent(type, videoOutputCount); });
 }
 
 unsigned Player::previewFormat(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines)
@@ -215,11 +153,11 @@ void Player::previewDisplay(void *opaque, void *)
 {
     auto *self = static_cast<Player *>(opaque);
     // One picture per moment asked for: it rests until the next.
-    self->post([self] {
+    self->m_engine.post([self] {
         if (libvlc_media_player_t *preview = self->m_previewPlayer)
             libvlc_media_player_set_pause(preview, 1);
     });
-    self->runOnUiThread([self, frame = self->m_previewDecoding] {
+    self->m_engine.runOnUiThread([self, frame = self->m_previewDecoding] {
         self->m_preview = std::move(frame);
         self->previewChanged.emit();
     });
@@ -297,7 +235,7 @@ libvlc_media_t *Player::newMedia(const std::wstring &location) const
 
 void Player::applyAudio()
 {
-    post([this, volume = m_volume, muted = m_muted] {
+    m_engine.post([this, volume = m_volume, muted = m_muted] {
         if (libvlc_media_player_t *player = m_player) {
             libvlc_audio_set_volume(player, volume);
             libvlc_audio_set_mute(player, muted);
@@ -307,7 +245,7 @@ void Player::applyAudio()
 
 void Player::setVideoWindow(HWND window)
 {
-    post([this, window] {
+    m_engine.post([this, window] {
         if (libvlc_media_player_t *player = m_player)
             libvlc_media_player_set_hwnd(player, window);
     });
@@ -323,7 +261,7 @@ void Player::open(const std::wstring &location)
     m_chapters.clear();
     changed.emit();
 
-    post([this, location] {
+    m_engine.post([this, location] {
         libvlc_media_player_t *player = m_player;
         if (!player)
             return;
@@ -338,7 +276,7 @@ void Player::open(const std::wstring &location)
 
 void Player::togglePause()
 {
-    post([this] {
+    m_engine.post([this] {
         libvlc_media_player_t *player = m_player;
         if (!player)
             return;
@@ -368,7 +306,7 @@ void Player::seek(double seconds)
     m_seekTarget = std::llround(m_position * 1000);
     if (m_seekQueued.exchange(true))
         return;
-    post([this] {
+    m_engine.post([this] {
         m_seekQueued = false;
         if (libvlc_media_player_t *player = m_player)
             libvlc_media_player_set_time(player, m_seekTarget);
@@ -378,7 +316,7 @@ void Player::seek(double seconds)
 void Player::preparePreview()
 {
     if (!m_location.empty())
-        post([this, location = m_location, seconds = m_position] { openPreviewMedia(location, seconds); });
+        m_engine.post([this, location = m_location, seconds = m_position] { openPreviewMedia(location, seconds); });
 }
 
 void Player::previewAt(double seconds)
@@ -388,7 +326,7 @@ void Player::previewAt(double seconds)
     m_previewTarget = std::llround(std::clamp(seconds, 0.0, m_duration) * 1000);
     if (m_previewQueued.exchange(true))
         return;
-    post([this, location = m_location] {
+    m_engine.post([this, location = m_location] {
         m_previewQueued = false;
         openPreviewMedia(location, m_previewTarget / 1000.0);
         if (libvlc_media_player_t *preview = m_previewPlayer) {
@@ -422,7 +360,7 @@ void Player::closePreview()
 {
     // A picture of the previous media is no preview of this one.
     m_preview = {};
-    post([this] {
+    m_engine.post([this] {
         if (libvlc_media_player_t *preview = m_previewPlayer)
             libvlc_media_player_stop(preview);
         m_previewMedia.clear();
@@ -443,7 +381,7 @@ void Player::setVolume(int percent)
 
 void Player::nextFrame()
 {
-    post([this] {
+    m_engine.post([this] {
         if (libvlc_media_player_t *player = m_player)
             libvlc_media_player_next_frame(player);
     });
@@ -451,7 +389,7 @@ void Player::nextFrame()
 
 void Player::cycleSubtitleTrack()
 {
-    post([this] {
+    m_engine.post([this] {
         if (libvlc_media_player_t *player = m_player)
             selectNextTrack(player, libvlc_video_get_spu_description, libvlc_video_get_spu, libvlc_video_set_spu);
     });
@@ -459,7 +397,7 @@ void Player::cycleSubtitleTrack()
 
 void Player::cycleAudioTrack()
 {
-    post([this] {
+    m_engine.post([this] {
         if (libvlc_media_player_t *player = m_player)
             selectNextTrack(player, libvlc_audio_get_track_description, libvlc_audio_get_track, libvlc_audio_set_track);
     });
@@ -471,7 +409,7 @@ void Player::takeSnapshot()
     std::error_code ignored;
     std::filesystem::create_directories(folder, ignored);
     // A folder path lets libVLC name the file.
-    post([this, folder = toUtf8(folder.wstring() + L"\\")] {
+    m_engine.post([this, folder = toUtf8(folder.wstring() + L"\\")] {
         if (libvlc_media_player_t *player = m_player)
             libvlc_video_take_snapshot(player, 0, folder.c_str(), 0, 0);
     });
@@ -479,10 +417,10 @@ void Player::takeSnapshot()
 
 void Player::stop(std::function<void()> done)
 {
-    post([this, done = std::move(done)] {
+    m_engine.post([this, done = std::move(done)] {
         if (libvlc_media_player_t *player = m_player)
             libvlc_media_player_stop(player);
-        runOnUiThread(done);
+        m_engine.runOnUiThread(done);
     });
 }
 
@@ -492,7 +430,7 @@ void Player::readDuration(const std::wstring &location, std::function<void(doubl
         m_waitingDurations.emplace_back(location, std::move(done));
         return;
     }
-    post([this, location, done = std::move(done)]() mutable {
+    m_engine.post([this, location, done = std::move(done)]() mutable {
         if (!m_vlc)
             return;
         libvlc_media_t *media = newMedia(location);
@@ -514,10 +452,10 @@ void Player::onParsed(const libvlc_event_t *event, void *opaque)
     Player *self = request->player;
     if (event->u.media_parsed_changed.new_status == libvlc_media_parsed_status_done) {
         if (const libvlc_time_t duration = libvlc_media_get_duration(request->media); duration > 0)
-            self->runOnUiThread([done = request->done, seconds = duration / 1000.0] { done(seconds); });
+            self->m_engine.runOnUiThread([done = request->done, seconds = duration / 1000.0] { done(seconds); });
     }
     // A media can't be released from its own event.
-    self->post([self, request] { self->releaseDurationRequest(request); });
+    self->m_engine.post([self, request] { self->releaseDurationRequest(request); });
 }
 
 void Player::releaseDurationRequest(DurationRequest *request)
