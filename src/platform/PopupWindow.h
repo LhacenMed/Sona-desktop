@@ -47,8 +47,6 @@ public:
                 PopupKeys keys = PopupKeys::Kept);
 
     View &content() const { return *m_content; }
-    // Whether it opened from another popup (a submenu).
-    bool belongsToPopup() const { return m_owner->m_frame == WindowFrame::Popup; }
     // Closes this popup and every popup it belongs to, back to the window they opened over.
     void closeChain();
     // What's behind it to blur, in its content's DIPs; none until the capture has an image.

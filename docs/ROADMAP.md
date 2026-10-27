@@ -139,7 +139,8 @@ value field (a `Slider` next to a `TextField`, composed where P5 needs it).
   blurred at full resolution (blur 12) under their Figma color at 92%. Dropdown lists are frosted too
   (opaque in Figma). They open with VS Code's menu motion, faster: fading in while growing from 97%
   over 167 ms (ease-out quint) out of the corner nearest what they open from. Before Windows 11
-  they're opaque.
+  they're opaque. Their highlighted rows take the shared hover overlay rather than Figma's opaque
+  BG/A2, which barely shows on a frosted Dark surface.
 - The right-click menu shows Record as Shift+R (decision D3), not R.
 - "VLC" becomes "Sona" (title, menu items, onboarding text).
 - The onboarding welcome text is shortened, and the logo is Sona's.

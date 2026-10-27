@@ -724,12 +724,11 @@ void Window::pointerLeft()
 void Window::pointerPressed(Point point)
 {
     m_overlay->hideTooltip();
-    // A click outside an open popup only closes it, except in a menu, where clicking another item
-    // closes the submenu and picks that item.
-    if (m_popup) {
+    // A click outside an open popup only closes it. A menu's submenu is left to the menu's rows
+    // (Menu): clicking its own row keeps it, another row replaces or closes it.
+    if (m_popup && m_frame != WindowFrame::Popup) {
         closePopup();
-        if (m_frame != WindowFrame::Popup)
-            return;
+        return;
     }
     View *target = viewAt(point);
     // The clicked view takes the focus, or the nearest view around it that accepts it (a list, for

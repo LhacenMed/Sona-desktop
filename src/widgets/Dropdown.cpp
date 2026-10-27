@@ -109,7 +109,7 @@ void OptionRow::paint(Canvas &canvas)
     const Palette &palette = canvas.palette();
     const bool chosen = m_index == m_list.selected();
     const bool lit = chosen || m_list.isHighlighted(m_index);
-    canvas.fillRoundedRect(bounds(), 4, palette.bgA2.faded(lit ? 1 : hoverAmount()));
+    canvas.fillRoundedRect(bounds(), 4, palette.hoverOverlay.faded(lit ? 1 : hoverAmount()));
     const float checkX = frame().width - textInset - iconSize;
     canvas.drawText(m_text, {textInset, 0, checkX - 10 - textInset, frame().height}, optionStyle, palette.fgA2);
     if (chosen)

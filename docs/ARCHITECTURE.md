@@ -49,7 +49,11 @@ between features:
   shape, tooltip or scroll, as behind native menus and flyouts; a menu stays live under its submenu.
   Views are removed with `View::remove`, so the window never keeps a pointer to a dead view.
   Hover feedback eases in and out for every view (`View::hoverAmount`); widgets tint by it rather
-  than by `isHovered`.
+  than by `isHovered`. Menu rows are the exception, as in native menus: their highlight moves at once.
+- **A menu and its submenus are one system** (`Menu`): each submenu knows the menu it opened from,
+  the open submenu follows the highlighted row once the pointer rests on it, the pointer can cross
+  rows on its way into the submenu, and a click inside a menu leaves its submenu to the menu's rows.
+  A menu keeps its icons' column only while one of its rows has an icon.
 - **Nothing runs its own message loop inside an input handler.** A file picker (`FileDialogs`) opens
   through `Window::runLater`, once the click or key that asked for it is handled, as a native menu's
   command arrives after the menu has closed; otherwise its loop would free the menu or panel whose
