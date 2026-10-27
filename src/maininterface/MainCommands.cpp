@@ -78,7 +78,10 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
                                                     .icon = L"subtitles",
                                                     .run = [&window] { window.toggleTracks(TrackKind::Subtitle); },
                                                     .active = [&window] { return window.isTracksOpen(TrackKind::Subtitle); }});
-    commands.define(CommandId::ShowPlaybackSettings, {.label = L"Playback Settings", .icon = L"playback-settings"});
+    commands.define(CommandId::ShowPlaybackSettings, {.label = L"Playback Settings",
+                                                      .icon = L"playback-settings",
+                                                      .run = [&window] { window.togglePreferences(); },
+                                                      .active = [&window] { return window.isPreferencesOpen(); }});
     commands.define(CommandId::ToggleQueue, {.label = L"Queue",
                                              .icon = L"lists",
                                              .shortcuts = {{'Q'}},

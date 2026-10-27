@@ -16,6 +16,7 @@ public:
 
     int selected() const { return m_selected; }
     void setSelected(int index);
+    void setOptions(std::vector<std::wstring> options, int selected);
     void setOnChanged(std::function<void(int)> onChanged) { m_onChanged = std::move(onChanged); }
 
     bool takesMouse() const override { return true; }

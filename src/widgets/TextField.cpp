@@ -31,7 +31,7 @@ TextField::TextField(std::wstring placeholder, TextFieldKind kind)
         invalidate();
     })
 {
-    setPreferredSize({0, kind == TextFieldKind::Search ? 34.0f : 37.0f});
+    setPreferredSize({0, kind == TextFieldKind::Search ? 34.0f : kind == TextFieldKind::Value ? 36.0f : 37.0f});
 }
 
 void TextField::setText(std::wstring text)
@@ -201,7 +201,8 @@ void TextField::paint(Canvas &canvas)
     } else {
         canvas.fillRoundedRect(bounds(), 6, palette.bgB2);
         // A 2px inside border.
-        canvas.strokeRoundedRect({1, 1, frame().width - 2, frame().height - 2}, 5, 2, palette.bgA4);
+        if (m_kind == TextFieldKind::Input)
+            canvas.strokeRoundedRect({1, 1, frame().width - 2, frame().height - 2}, 5, 2, palette.bgA4);
     }
 
     const Rect box{textLeft(), 0, textRight() - textLeft(), frame().height};
@@ -218,8 +219,9 @@ void TextField::paint(Canvas &canvas)
         canvas.drawText(m_placeholder, box, textStyle, palette.fgA4);
     else
         canvas.drawText(m_text, {origin, 0, caretX(m_text.size()) + 1, frame().height}, textStyle, palette.fgA2);
-    const Window *host = window();
-    if (hasFocus() && host && host->isActive() && m_caretShown)
+    // In a popup, which never takes activation, while the window it opened over is active.
+    Window *host = window();
+    if (hasFocus() && host && host->rootWindow().isActive() && m_caretShown)
         canvas.fillRect({origin + caretX(m_caret), lineTop, 1, height}, palette.fgA1);
     canvas.popClip();
 }

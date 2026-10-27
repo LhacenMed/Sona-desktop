@@ -21,6 +21,10 @@ constexpr const char *migrations[] = {
     // last played in seconds since 1970.
     "CREATE TABLE history (location TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL, audio INTEGER NOT NULL,"
     " position INTEGER NOT NULL, duration INTEGER NOT NULL, last_played INTEGER NOT NULL, play_count INTEGER NOT NULL);",
+    // Presets: the preferences panel's values under a name, as "key=value" lines; and the preset each
+    // folder plays with.
+    "CREATE TABLE presets (name TEXT PRIMARY KEY, preferences TEXT NOT NULL);"
+    "CREATE TABLE folder_presets (folder TEXT PRIMARY KEY, preset TEXT NOT NULL);",
 };
 
 [[noreturn]] void fail(sqlite3 *connection)

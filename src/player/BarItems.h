@@ -5,6 +5,7 @@
 
 #include "player/BarLayout.h"
 
+class ActivePreset;
 class Bookmarks;
 class CommandRegistry;
 class Player;
@@ -19,6 +20,8 @@ struct BarContext
     // The playing media's, marked on the seek bar.
     Bookmarks &bookmarks;
     SettingsStore &settings;
+    // The preset in force, which the preferences panel changes.
+    ActivePreset &preset;
     const CommandRegistry &commands;
     // Opens the main menu from the button that asks for it.
     std::function<void(View &button)> openMainMenu;

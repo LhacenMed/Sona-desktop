@@ -10,9 +10,9 @@
 
 class GraphicsDevice;
 
-// Figma's text input (6251:13904), bordered, and its search field (1040:2512), darker with a
-// magnifier.
-enum class TextFieldKind { Input, Search };
+// Figma's text input (6251:13904), bordered; its search field (1040:2512), darker with a magnifier;
+// and the panels' value field (text_input 4046:12353), a plain well.
+enum class TextFieldKind { Input, Search, Value };
 
 // One line of editable text with a placeholder while empty: a blinking caret, selection with the
 // mouse and keyboard, word moves (Ctrl), the clipboard, undo, and IME composition at the caret.

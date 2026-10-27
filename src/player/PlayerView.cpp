@@ -7,6 +7,7 @@
 #include "platform/PopupWindow.h"
 #include "playback/Player.h"
 #include "player/ControlBar.h"
+#include "player/PreferencesPanel.h"
 #include "player/QueuePanel.h"
 #include "player/TitleBar.h"
 #include "player/TracksPanel.h"
@@ -110,6 +111,23 @@ void PlayerView::toggleTracks(TrackKind tab)
         tracks->showTab(tab);
     else
         window()->closePopup();
+}
+
+bool PlayerView::isPreferencesOpen() const
+{
+    return dynamic_cast<const PreferencesPanel *>(openPanel());
+}
+
+void PlayerView::togglePreferences()
+{
+    if (isPreferencesOpen()) {
+        window()->closePopup();
+        return;
+    }
+    // "Show Preferences" opens the same kind's settings: the tracks' tabs are Video, Audio, Subtitles.
+    const auto *tracks = dynamic_cast<const TracksPanel *>(openPanel());
+    const PreferencesTab tab = tracks ? static_cast<PreferencesTab>(static_cast<int>(tracks->tab()) + 1) : PreferencesTab::Playback;
+    showPanel(std::make_unique<PreferencesPanel>(m_context, tab), PreferencesPanel::width, PreferencesPanel::height);
 }
 
 void PlayerView::updateBars()

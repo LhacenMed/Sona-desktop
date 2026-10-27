@@ -7,6 +7,7 @@ add_executable(sona WIN32
     data/Bookmarks.cpp
     data/Database.cpp
     data/History.cpp
+    data/Presets.cpp
     graphics/BackdropCapture.cpp
     graphics/Canvas.cpp
     graphics/GraphicsDevice.cpp
@@ -37,6 +38,7 @@ add_executable(sona WIN32
     platform/Timer.cpp
     platform/Window.cpp
     platform/WorkerThread.cpp
+    playback/ActivePreset.cpp
     playback/MediaFiles.cpp
     playback/Player.cpp
     playback/Queue.cpp
@@ -45,6 +47,7 @@ add_executable(sona WIN32
     player/ControlBar.cpp
     player/PlayButton.cpp
     player/PlayerView.cpp
+    player/PreferencesPanel.cpp
     player/QueuePanel.cpp
     player/SeekBar.cpp
     player/SeekPreview.cpp
@@ -54,13 +57,16 @@ add_executable(sona WIN32
     player/VideoHost.cpp
     player/VideoView.cpp
     player/VolumeBar.cpp
+    settings/PlaybackPreferences.cpp
     settings/SettingsStore.cpp
     style/Theme.cpp
     widgets/Animation.cpp
     widgets/Button.cpp
     widgets/CaptionButton.cpp
     widgets/DialogWindow.cpp
+    widgets/DisabledArea.cpp
     widgets/Dropdown.cpp
+    widgets/Expander.cpp
     widgets/Icon.cpp
     widgets/IconButton.cpp
     widgets/Label.cpp

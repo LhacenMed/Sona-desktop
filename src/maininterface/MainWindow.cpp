@@ -39,7 +39,7 @@ public:
 } // namespace
 
 MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player, Queue &queue,
-                       Bookmarks &bookmarks, History &history, Thumbnails &thumbnails)
+                       Bookmarks &bookmarks, History &history, Thumbnails &thumbnails, ActivePreset &preset)
     : Window(graphics, theme)
     , m_settings(settings)
     , m_player(player)
@@ -50,7 +50,7 @@ MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &se
     m_videoHost = std::make_unique<VideoHost>(hwnd());
     player.setVideoWindow(m_videoHost->hwnd());
 
-    const BarContext barContext{player, bookmarks, settings, m_commands, [this](View &button) {
+    const BarContext barContext{player, bookmarks, settings, preset, m_commands, [this](View &button) {
         Menu::open(*this, button.mapToWindow(button.bounds()), PopupPlacement::Below, mainMenuItems(), m_commands, mainMenuWidth);
     }};
     auto screens = std::make_unique<Screens>();
@@ -109,6 +109,16 @@ bool MainWindow::isTracksOpen(TrackKind tab) const
 void MainWindow::toggleTracks(TrackKind tab)
 {
     m_playerView->toggleTracks(tab);
+}
+
+bool MainWindow::isPreferencesOpen() const
+{
+    return m_playerView->isPreferencesOpen();
+}
+
+void MainWindow::togglePreferences()
+{
+    m_playerView->togglePreferences();
 }
 
 bool MainWindow::isLibraryShown() const

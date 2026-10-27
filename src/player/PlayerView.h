@@ -40,6 +40,9 @@ public:
     bool isTracksOpen(TrackKind tab) const;
     // Opens the tracks at `tab`, shows `tab` if they're open at another, or closes them.
     void toggleTracks(TrackKind tab);
+    // The preferences (PreferencesPanel): from the tracks, at their tab's; otherwise at Playback.
+    bool isPreferencesOpen() const;
+    void togglePreferences();
 
     void layout() override;
     void paint(Canvas &canvas) override;

@@ -139,6 +139,13 @@ void Dropdown::setSelected(int index)
     invalidate();
 }
 
+void Dropdown::setOptions(std::vector<std::wstring> options, int selected)
+{
+    m_options = std::move(options);
+    m_selected = selected;
+    invalidate();
+}
+
 void Dropdown::paint(Canvas &canvas)
 {
     const Palette &palette = canvas.palette();

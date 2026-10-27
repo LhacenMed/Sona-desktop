@@ -8,6 +8,7 @@
 #include "core/Signal.h"
 #include "platform/Window.h"
 
+class ActivePreset;
 class Bookmarks;
 class History;
 class LibraryView;
@@ -25,7 +26,7 @@ class MainWindow : public Window
 {
 public:
     MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player, Queue &queue,
-               Bookmarks &bookmarks, History &history, Thumbnails &thumbnails);
+               Bookmarks &bookmarks, History &history, Thumbnails &thumbnails, ActivePreset &preset);
     ~MainWindow() override;
 
     // First-run onboarding, modal over this window.
@@ -43,6 +44,8 @@ public:
     void toggleQueue();
     bool isTracksOpen(TrackKind tab) const;
     void toggleTracks(TrackKind tab);
+    bool isPreferencesOpen() const;
+    void togglePreferences();
     bool isLibraryShown() const;
     void focusLibrarySearch();
 

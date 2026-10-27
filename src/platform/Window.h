@@ -150,6 +150,8 @@ private:
     void layoutRoot();
     void render();
     bool handleKey(KeyChord chord);
+    // Text goes to the focused view, or down to an open popup's, which takes the keyboard.
+    void handleCharacter(wchar_t character);
     void pointerMoved(Point point);
     void pointerLeft();
     // Shows the pointer the view under it asks for, or none while it's hidden.

@@ -461,9 +461,7 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             return 0;
         break;
     case WM_CHAR:
-        // Text goes to the focused view; an open popup takes the keyboard.
-        if (!m_popup && m_focused)
-            m_focused->charTyped(static_cast<wchar_t>(wParam));
+        handleCharacter(static_cast<wchar_t>(wParam));
         return 0;
     case WM_IME_STARTCOMPOSITION:
         placeImeWindows();
@@ -667,6 +665,14 @@ bool Window::handleKey(KeyChord chord)
     if (m_focused && m_focused->keyPressed(chord))
         return true;
     return keyPressed(chord);
+}
+
+void Window::handleCharacter(wchar_t character)
+{
+    if (m_popup)
+        m_popup->handleCharacter(character);
+    else if (m_focused)
+        m_focused->charTyped(character);
 }
 
 void Window::pointerMoved(Point point)

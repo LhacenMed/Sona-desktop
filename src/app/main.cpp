@@ -9,10 +9,12 @@
 #include "data/Bookmarks.h"
 #include "data/Database.h"
 #include "data/History.h"
+#include "data/Presets.h"
 #include "graphics/GraphicsDevice.h"
 #include "library/HistoryRecorder.h"
 #include "library/Thumbnails.h"
 #include "maininterface/MainWindow.h"
+#include "playback/ActivePreset.h"
 #include "playback/Player.h"
 #include "playback/Queue.h"
 #include "settings/AppSettings.h"
@@ -55,6 +57,8 @@ void runPlayer(const std::wstring &media)
     Queue queue(player);
     History history(database);
     const HistoryRecorder historyRecorder(player, history);
+    Presets presets(database);
+    ActivePreset preset(player, presets);
     Thumbnails thumbnails;
     // Bookmarks are the playing item's.
     const Subscription playingBookmarks = queue.changed.connect([&queue, &bookmarks] {
@@ -62,7 +66,7 @@ void runPlayer(const std::wstring &media)
         bookmarks.setMedia(playing ? playing->location : std::wstring());
     });
     GraphicsDevice graphics;
-    MainWindow window(graphics, theme, settings, player, queue, bookmarks, history, thumbnails);
+    MainWindow window(graphics, theme, settings, player, queue, bookmarks, history, thumbnails, preset);
 
     // Launching with media opens a player, maximized. An empty launch opens the library at the
     // default size.

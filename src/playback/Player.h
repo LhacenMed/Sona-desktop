@@ -12,7 +12,9 @@
 
 #include "core/Picture.h"
 #include "core/Signal.h"
+#include "platform/Timer.h"
 #include "platform/WorkerThread.h"
+#include "settings/PlaybackPreferences.h"
 
 struct libvlc_instance_t;
 struct libvlc_media_player_t;
@@ -117,11 +119,17 @@ public:
     void cycleSubtitleTrack();
     void cycleAudioTrack();
     void selectTrack(TrackKind kind, int id);
-    // Adds a subtitle file to the playing media and shows it.
-    void addSubtitleFile(const std::wstring &path);
+    // Adds a subtitle file to the playing media and, when `show` says so, shows it.
+    void addSubtitleFile(const std::wstring &path, bool show = true);
     void setAudioDevice(const std::string &id);
     // Lists the audio devices again, as devices come and go without libVLC saying so.
     void refreshAudioDevices();
+    // Applies the preferences panel's values: at once where libVLC can; otherwise, once changes
+    // settle, by restarting libVLC with them and reopening the media where it was.
+    void applyPreferences(const PreferenceValues &values);
+    // An equalizer preset's preamp, then its bands, in decibels; `preset` counts from 1, as
+    // Preference::EqualizerPreset does.
+    static std::vector<double> equalizerPreset(int preset);
     // Saves the current frame to Pictures\Sona.
     void takeSnapshot();
     // Stops playback and releases the video window, then runs `done` on the UI thread.
@@ -149,7 +157,19 @@ private:
     static void previewDisplay(void *player, void *picture);
     static void onParsed(const libvlc_event_t *event, void *request);
 
-    void startEngine();
+    // libVLC's arguments for the preferences it reads only when it starts.
+    static std::vector<std::string> engineArguments(const PreferenceValues &preferences);
+    void startEngine(const std::vector<std::string> &arguments);
+    // Releases `player` and the rest of libVLC; the UI thread takes the player first, so it never
+    // reads one being released.
+    void stopEngine(libvlc_media_player_t *player);
+    // Starts libVLC again with the preferences' arguments; with `resume`, reopens what played
+    // where it was, with its tracks and subtitle files.
+    void restartEngine(bool resume);
+    // The preferences libVLC applies live, those different from `previous` (all, when there is none).
+    void applyLivePreferences(const PreferenceValues *previous);
+    // The options a media opens with: the preferred track languages.
+    void addMediaOptions(libvlc_media_t *media) const;
     // `addedSubtitle`: the id of the subtitle track an ESAdded event adds, or -1.
     void handleEvent(int type, int videoOutputCount, int addedSubtitle);
     void sync();
@@ -172,6 +192,7 @@ private:
     // Decoded on libVLC's thread, then handed to the UI thread as m_preview.
     Picture m_previewDecoding;
     std::vector<std::unique_ptr<DurationRequest>> m_durationRequests;
+    HWND m_videoWindow = nullptr;
     // Only the latest target of a seek or preview is sent: one command is queued at a time.
     std::atomic<long long> m_seekTarget = 0;
     std::atomic<bool> m_seekQueued = false;
@@ -194,13 +215,28 @@ private:
     // The names of the subtitle files added and not loaded yet, in the order they were added; each
     // names the next subtitle track that appears.
     std::deque<std::wstring> m_loadingSubtitles;
+    // The subtitle files added to the media, which a restart adds again once it plays (and the one
+    // to show, or none).
+    std::vector<std::wstring> m_subtitleFiles;
+    std::vector<std::wstring> m_subtitleFilesToRestore;
+    std::wstring m_subtitleFileToShow;
     std::vector<AudioDevice> m_audioDevices;
     std::string m_audioDevice;
     std::wstring m_location;
-    // From open until the media plays (or fails), with the duration reads waiting for it.
+    // From open until the media plays (or fails), with the duration reads waiting for it, and where it
+    // starts.
     bool m_opening = false;
+    double m_startTime = 0;
+    // While open() runs: preferences applied then (the media's folder's preset) reach libVLC before
+    // the media opens, so there's nothing to reopen.
+    bool m_inOpen = false;
+    // Whether the live preferences reached the media that plays; they go to each media as it starts.
+    bool m_preferencesApplied = false;
     std::vector<std::pair<std::wstring, std::function<void(double)>>> m_waitingDurations;
     Picture m_preview;
+    PreferenceValues m_preferences;
+    // A restart waits for changes to settle, so dragging a slider restarts libVLC once.
+    Timer m_restartTimer;
     // Last, so it ends (running the commands still queued) before the state they use goes.
     WorkerThread m_engine;
 };
