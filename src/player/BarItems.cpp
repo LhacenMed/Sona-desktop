@@ -39,13 +39,20 @@ Button &bindCommand(Button &button, CommandId id, const CommandRegistry &command
     return button;
 }
 
-// A button that opens a panel shows its active state while the panel is open.
-template <typename Button>
-Button &bindPanelCommand(Button &button, CommandId id, const CommandRegistry &commands)
+// A button that opens a panel: while one is open, a click on it closes the panel or swaps it for its
+// own, and it shows its active state while its panel is open.
+class PanelButton : public IconWrapper
 {
-    button.setActiveWhen([&commands, id] { return commands.isActive(id); });
-    return bindCommand(button, id, commands);
-}
+public:
+    PanelButton(CommandId id, const CommandRegistry &commands)
+        : IconWrapper(commands.command(id).icon)
+    {
+        setActiveWhen([&commands, id] { return commands.isActive(id); });
+        bindCommand(*this, id, commands);
+    }
+
+    bool actsOnPopups() const override { return true; }
+};
 
 // The app logo at the size of a native window icon; it opens the system menu like one.
 class WindowIcon : public View
@@ -216,15 +223,13 @@ View &addItem(Row &group, BarItem item, BarContext &context)
     case BarItem::Volume:
         return group.add<VolumeControl>(player, commands);
     case BarItem::AudioTracks:
-        return bindPanelCommand(group.add<IconWrapper>(commandIcon(CommandId::ShowAudioTracks)), CommandId::ShowAudioTracks, commands);
+        return group.add<PanelButton>(CommandId::ShowAudioTracks, commands);
     case BarItem::Subtitles:
-        return bindPanelCommand(group.add<IconWrapper>(commandIcon(CommandId::ShowSubtitleTracks)), CommandId::ShowSubtitleTracks,
-                                commands);
+        return group.add<PanelButton>(CommandId::ShowSubtitleTracks, commands);
     case BarItem::PlaybackSettings:
-        return bindPanelCommand(group.add<IconWrapper>(commandIcon(CommandId::ShowPlaybackSettings)),
-                                CommandId::ShowPlaybackSettings, commands);
+        return group.add<PanelButton>(CommandId::ShowPlaybackSettings, commands);
     case BarItem::Queue:
-        return bindPanelCommand(group.add<IconWrapper>(commandIcon(CommandId::ToggleQueue)), CommandId::ToggleQueue, commands);
+        return group.add<PanelButton>(CommandId::ToggleQueue, commands);
     }
     return group;
 }

@@ -16,16 +16,20 @@ struct ListItem
     bool operator==(const ListItem &) const = default;
 };
 
+// How a list shows its current row: the playing item's name in the accent, or a check before the
+// chosen one (the tracks panel's lists, Figma 494:2403).
+enum class ListMark { Name, Check };
+
 // Figma queue row (463:848): a 24px icon in a 32px box (the queue's drag handle), a number (chapters,
 // 6321:14069) or neither, then a name and trailing detail. Hovering tints it, as does being
-// selected; the current row (the playing item) has an accent name.
+// selected; the current row is marked as its list says.
 class ListRow : public View
 {
 public:
     static constexpr float height = 32;
 
-    // `icon` leads the row; empty for none.
-    ListRow(std::wstring icon, ListItem item);
+    // `icon` leads the row; empty for none. A row marked with a check keeps the check's box.
+    ListRow(std::wstring icon, ListItem item, ListMark mark = ListMark::Name);
 
     void setItem(ListItem item);
     void setCurrent(bool current);
@@ -37,6 +41,7 @@ public:
 private:
     std::wstring m_icon;
     ListItem m_item;
+    ListMark m_mark;
     bool m_current = false;
     bool m_selected = false;
 };

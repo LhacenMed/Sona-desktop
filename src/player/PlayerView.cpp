@@ -1,6 +1,7 @@
 #include "player/PlayerView.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "graphics/Canvas.h"
 #include "platform/PopupWindow.h"
@@ -8,6 +9,7 @@
 #include "player/ControlBar.h"
 #include "player/QueuePanel.h"
 #include "player/TitleBar.h"
+#include "player/TracksPanel.h"
 #include "player/VideoView.h"
 #include "style/Surface.h"
 #include "style/Theme.h"
@@ -62,26 +64,52 @@ void PlayerView::pointerChanged()
         m_pointerRest.stop();
 }
 
-bool PlayerView::isQueueOpen() const
+View *PlayerView::openPanel() const
 {
     const Window *host = window();
     const auto *popup = host ? dynamic_cast<const PopupWindow *>(host->popup()) : nullptr;
-    return popup && dynamic_cast<const QueuePanel *>(&popup->content());
+    return popup ? &popup->content() : nullptr;
+}
+
+void PlayerView::showPanel(std::unique_ptr<View> panel, float width, float height)
+{
+    Window &host = *window();
+    // Opening one panel closes any other popup.
+    host.closePopup();
+    const float bottom = frame().height - controlBarHeight - panelMargin;
+    const float top = std::max(m_titleBar.frame().height + panelMargin, bottom - height);
+    const Rect area = mapToWindow({frame().width - panelMargin - width, top, width, std::max(0.0f, bottom - top)});
+    host.openWindow<PopupWindow>(host, area, PopupPlacement::Docked, Surfaces::panel, std::move(panel), PopupKeys::Passed);
+}
+
+bool PlayerView::isQueueOpen() const
+{
+    return dynamic_cast<const QueuePanel *>(openPanel());
 }
 
 void PlayerView::toggleQueue()
 {
-    Window &host = *window();
-    const bool wasOpen = isQueueOpen();
-    // Opening one panel closes any other popup.
-    host.closePopup();
-    if (wasOpen)
-        return;
-    const float top = m_titleBar.frame().height + panelMargin;
-    const float height = std::max(0.0f, frame().height - controlBarHeight - panelMargin - top);
-    const Rect panel = mapToWindow({frame().width - panelMargin - QueuePanel::width, top, QueuePanel::width, height});
-    host.openWindow<PopupWindow>(host, panel, PopupPlacement::Docked, Surfaces::panel, std::make_unique<QueuePanel>(m_context, m_queue),
-                                 PopupKeys::Passed);
+    if (isQueueOpen())
+        window()->closePopup();
+    else
+        showPanel(std::make_unique<QueuePanel>(m_context, m_queue), QueuePanel::width, std::numeric_limits<float>::infinity());
+}
+
+bool PlayerView::isTracksOpen(TrackKind tab) const
+{
+    const auto *tracks = dynamic_cast<const TracksPanel *>(openPanel());
+    return tracks && tracks->tab() == tab;
+}
+
+void PlayerView::toggleTracks(TrackKind tab)
+{
+    auto *tracks = dynamic_cast<TracksPanel *>(openPanel());
+    if (!tracks)
+        showPanel(std::make_unique<TracksPanel>(m_context, tab), TracksPanel::width, TracksPanel::height);
+    else if (tracks->tab() != tab)
+        tracks->showTab(tab);
+    else
+        window()->closePopup();
 }
 
 void PlayerView::updateBars()

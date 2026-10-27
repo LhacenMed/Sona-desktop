@@ -101,6 +101,16 @@ void MainWindow::toggleQueue()
     m_playerView->toggleQueue();
 }
 
+bool MainWindow::isTracksOpen(TrackKind tab) const
+{
+    return m_playerView->isTracksOpen(tab);
+}
+
+void MainWindow::toggleTracks(TrackKind tab)
+{
+    m_playerView->toggleTracks(tab);
+}
+
 bool MainWindow::isLibraryShown() const
 {
     return m_libraryView->isVisible();

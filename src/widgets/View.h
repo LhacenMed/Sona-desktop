@@ -71,6 +71,9 @@ public:
     virtual bool takesMouse() const { return false; }
     virtual HitRole hitRole() const { return HitRole::Client; }
     virtual Cursor cursor() const { return Cursor::Arrow; }
+    // Whether a press on it while a popup is open reaches it rather than only closing the popup: it
+    // opens, switches and closes popups itself (a panel's button).
+    virtual bool actsOnPopups() const { return false; }
     // Shown once the pointer rests on the view.
     const std::wstring &tooltip() const { return m_tooltip; }
     void setTooltip(std::wstring tooltip) { m_tooltip = std::move(tooltip); }

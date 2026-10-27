@@ -17,8 +17,8 @@ constexpr float dragDistance = 4;
 class ListView::Row : public ListRow
 {
 public:
-    Row(ListView &list, std::wstring icon)
-        : ListRow(std::move(icon), {})
+    Row(ListView &list, std::wstring icon, ListMark mark)
+        : ListRow(std::move(icon), {}, mark)
         , m_list(list)
     {
     }
@@ -26,7 +26,8 @@ public:
     void mousePressed(Point point) override
     {
         m_pressY = point.y;
-        m_list.select(m_list.indexOf(*this));
+        if (m_list.m_onRemoved)
+            m_list.select(m_list.indexOf(*this));
     }
 
     void mouseDragged(Point point) override
@@ -51,8 +52,9 @@ private:
     bool m_dragging = false;
 };
 
-ListView::ListView(std::wstring icon)
+ListView::ListView(std::wstring icon, ListMark mark)
     : m_icon(std::move(icon))
+    , m_mark(mark)
 {
 }
 
@@ -64,7 +66,7 @@ void ListView::setItems(std::vector<ListItem> items, int current)
         m_rows.pop_back();
     }
     while (static_cast<int>(m_rows.size()) < count)
-        m_rows.push_back(&add<Row>(*this, m_icon));
+        m_rows.push_back(&add<Row>(*this, m_icon, m_mark));
     m_selected = std::min(m_selected, count - 1);
     for (int i = 0; i < count; ++i) {
         m_rows[i]->setItem(std::move(items[i]));

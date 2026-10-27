@@ -17,6 +17,7 @@ class Queue;
 class SettingsStore;
 class Thumbnails;
 class VideoHost;
+enum class TrackKind;
 
 // Figma "Player" (247:445): the video, with the title bar and controls over it, while something
 // plays; otherwise the library (Figma Home 6261:15078), which stopping returns to.
@@ -40,6 +41,8 @@ public:
     void setBarsAutoHide(bool autoHide);
     bool isQueueOpen() const;
     void toggleQueue();
+    bool isTracksOpen(TrackKind tab) const;
+    void toggleTracks(TrackKind tab);
     bool isLibraryShown() const;
     void focusLibrarySearch();
 

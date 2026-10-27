@@ -20,9 +20,10 @@ constexpr TextStyle detailStyle{.size = 14, .align = TextAlign::Trailing};
 
 } // namespace
 
-ListRow::ListRow(std::wstring icon, ListItem item)
+ListRow::ListRow(std::wstring icon, ListItem item, ListMark mark)
     : m_icon(std::move(icon))
     , m_item(std::move(item))
+    , m_mark(mark)
 {
     setPreferredSize({0, height});
 }
@@ -57,7 +58,11 @@ void ListRow::paint(Canvas &canvas)
     const float tint = std::max(hoverAmount(), m_selected ? 1.0f : 0.0f);
     canvas.fillRoundedRect(bounds(), 4, isPressed() ? palette.pressedOverlay : palette.hoverOverlay.faded(tint));
     float nameX = 0;
-    if (!m_icon.empty()) {
+    if (m_mark == ListMark::Check) {
+        if (m_current)
+            drawActiveIcon(canvas, L"check", {(iconBox - iconSize) / 2, (frame().height - iconSize) / 2});
+        nameX = iconBox + gap;
+    } else if (!m_icon.empty()) {
         drawIcon(canvas, m_icon, {(iconBox - iconSize) / 2, (frame().height - iconSize) / 2}, palette.fgA2);
         nameX = iconBox + gap;
     } else if (m_item.number > 0) {
@@ -69,5 +74,5 @@ void ListRow::paint(Canvas &canvas)
     const float detailX = frame().width - trailingPadding - detailWidth;
     canvas.drawText(m_item.detail, {detailX, 0, detailWidth, frame().height}, detailStyle, palette.fgA3);
     canvas.drawText(m_item.name, {nameX, 0, detailX - gap - nameX, frame().height}, nameStyle,
-                    m_current ? palette.accentMain : palette.fgA1);
+                    m_current && m_mark == ListMark::Name ? palette.accentMain : palette.fgA1);
 }

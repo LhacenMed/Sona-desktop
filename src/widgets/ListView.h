@@ -7,13 +7,14 @@
 #include "widgets/ListRow.h"
 
 // Figma panel list (463:847): ListRows 12 apart, as tall as its rows. A click activates a row (plays
-// it, jumps to it) and selects it, and Delete removes the selected one; where the list allows it,
-// dragging a row moves it instead, the other rows making way as it goes.
+// it, jumps to it); where rows can be removed, it selects it too, and Delete removes the selected
+// one; where the list allows it, dragging a row moves it instead, the other rows making way as it
+// goes.
 class ListView : public View
 {
 public:
-    // Every row leads with `icon`; empty for none.
-    explicit ListView(std::wstring icon = {});
+    // Every row leads with `icon`; empty for none. The current row is marked by `mark`.
+    explicit ListView(std::wstring icon = {}, ListMark mark = ListMark::Name);
 
     // Shows `items`, the row at `current` (or none, -1) highlighted. The selection stays where it
     // was, or on the last row once there are fewer.
@@ -40,6 +41,7 @@ private:
     void drop();
 
     std::wstring m_icon;
+    ListMark m_mark;
     std::vector<Row *> m_rows;
     int m_selected = -1;
     // While a row is dragged: its index and the one it would be dropped at.

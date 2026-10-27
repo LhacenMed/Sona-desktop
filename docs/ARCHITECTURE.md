@@ -21,7 +21,7 @@ between features:
 | `commands/` | `CommandRegistry`: every user action (`CommandId`) with its shortcuts and what it runs. |
 | `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (tooltips, values, messages), `Menu`, `Label`, `Icon`, `IconButton`, `CaptionButton`, `WindowButtons`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `ListView`, `DialogWindow`, `Animation`. |
 | `playback/` | `Player`: the only code that includes libVLC. `Queue`: what plays next, the one place media is opened from. `MediaFiles`: what counts as media and how folders expand. |
-| `player/`, `library/`, `maininterface/`, `onboarding/` | Feature UI: the library (`LibraryView`: navigation, header, Home's sections from the history by `LibraryItems`; `Thumbnails`; `HistoryRecorder`, which keeps the history as media plays), the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`; `QueuePanel`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
+| `player/`, `library/`, `maininterface/`, `onboarding/` | Feature UI: the library (`LibraryView`: navigation, header, Home's sections from the history by `LibraryItems`; `Thumbnails`; `HistoryRecorder`, which keeps the history as media plays), the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`; `QueuePanel`, `TracksPanel`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
 | `gallery/` | Debug builds only (`sona.exe --gallery`): every widget on one page, for checking against Figma. |
 
 ## Rules that keep it consistent
@@ -44,7 +44,9 @@ between features:
 - **Input reaches views through the window.** The mouse goes to the view under it (the `Overlay`
   first), keys to the focused view and then to the window's commands, wheel scrolls up the view
   tree until one scrolls. An open popup (`PopupWindow`, which never takes activation) gets every
-  key; a popup closes on Escape or a click elsewhere, and that click does nothing else.
+  key; a popup closes on Escape or a click elsewhere, and that click does nothing else, except on a
+  view that acts on popups itself (`View::actsOnPopups`: the bar's panel buttons, which close their
+  panel or swap it for theirs in one click).
   Until then the content under it takes no part in the mouse (`Window::viewAt`): no hover, pointer
   shape, tooltip or scroll, as behind native menus and flyouts; a menu stays live under its submenu.
   Views are removed with `View::remove`, so the window never keeps a pointer to a dead view.

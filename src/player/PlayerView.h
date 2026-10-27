@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "core/Signal.h"
 #include "platform/Timer.h"
 #include "player/AutoHideBar.h"
@@ -10,6 +12,7 @@ class ControlBar;
 class Queue;
 class TitleBar;
 class VideoView;
+enum class TrackKind;
 
 // Figma "Player" (247:445) and "Player - hide UI" (3328:11554): the video inside its rounded frame,
 // with the title bar above and the control bar below. The bars either stay fixed, with the video
@@ -30,15 +33,23 @@ public:
     void setBarsAutoHide(bool autoHide);
     // The pointer moved or left, or a press or popup that held the bars ended.
     void pointerChanged();
-    // The queue panel (QueuePanel), over the video above the control bar's right end.
+    // The panels over the video above the control bar's right end, one at a time: the queue
+    // (QueuePanel) and the tracks (TracksPanel), open at a kind's tab.
     bool isQueueOpen() const;
     void toggleQueue();
+    bool isTracksOpen(TrackKind tab) const;
+    // Opens the tracks at `tab`, shows `tab` if they're open at another, or closes them.
+    void toggleTracks(TrackKind tab);
 
     void layout() override;
     void paint(Canvas &canvas) override;
     void paintTree(Canvas &canvas) override;
 
 private:
+    // The panel open over the video, if any.
+    View *openPanel() const;
+    // Opens `panel` in place of any popup, `height` tall at most.
+    void showPanel(std::unique_ptr<View> panel, float width, float height);
     void updateBars();
     // The bars where their reveals put them for this frame, and the video's frame between them.
     void placeBars();

@@ -7,6 +7,7 @@
 #include <cwctype>
 #include <filesystem>
 #include <iterator>
+#include <span>
 
 namespace {
 
@@ -18,6 +19,21 @@ constexpr std::wstring_view mediaExtensions[] = {
     L".ape", L".au",  L".dts",  L".flac", L".m4a",  L".m4b",  L".mka",  L".mp2", L".mp3",  L".mpc",  L".oga",
     L".ogg", L".opus", L".ra",  L".tta",  L".voc",  L".wav",  L".wma",  L".wv",  L".weba", L".xm",
 };
+
+// The subtitle formats libVLC reads (VLC's EXTENSIONS_SUBTITLE).
+constexpr std::wstring_view subtitleExtensions[] = {
+    L".aqt", L".ass", L".cdg", L".dfxp", L".dks", L".idx", L".jss",  L".mks", L".mpl2", L".pjs", L".psb", L".rt",  L".sami",
+    L".scc", L".smi", L".smil", L".srt", L".ssa", L".stl",  L".sub", L".tt",   L".ttml", L".txt", L".usf", L".utf", L".vtt",
+};
+
+// The picker's pattern for files with these extensions: "*.mkv;*.mp4".
+std::wstring filePattern(std::span<const std::wstring_view> extensions)
+{
+    std::wstring pattern;
+    for (const std::wstring_view extension : extensions)
+        pattern += (pattern.empty() ? L"*" : L";*") + std::wstring(extension);
+    return pattern;
+}
 
 bool isMediaFile(const std::filesystem::path &path)
 {
@@ -54,10 +70,12 @@ std::wstring displayName(const std::wstring &location)
 
 FileType mediaFileType()
 {
-    std::wstring pattern;
-    for (const std::wstring_view extension : mediaExtensions)
-        pattern += (pattern.empty() ? L"*" : L";*") + std::wstring(extension);
-    return {L"Media Files", pattern};
+    return {L"Media Files", filePattern(mediaExtensions)};
+}
+
+FileType subtitleFileType()
+{
+    return {L"Subtitle Files", filePattern(subtitleExtensions)};
 }
 
 bool sortsBefore(const std::wstring &a, const std::wstring &b)

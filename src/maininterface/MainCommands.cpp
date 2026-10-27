@@ -70,8 +70,14 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
                                             .activeLabel = L"Unmute",
                                             .run = [&player] { player.toggleMute(); },
                                             .active = [&player] { return player.isMuted(); }});
-    commands.define(CommandId::ShowAudioTracks, {.label = L"Audio Tracks", .icon = L"audio"});
-    commands.define(CommandId::ShowSubtitleTracks, {.label = L"Subtitle Tracks", .icon = L"subtitles"});
+    commands.define(CommandId::ShowAudioTracks, {.label = L"Audio Tracks",
+                                                 .icon = L"audio",
+                                                 .run = [&window] { window.toggleTracks(TrackKind::Audio); },
+                                                 .active = [&window] { return window.isTracksOpen(TrackKind::Audio); }});
+    commands.define(CommandId::ShowSubtitleTracks, {.label = L"Subtitle Tracks",
+                                                    .icon = L"subtitles",
+                                                    .run = [&window] { window.toggleTracks(TrackKind::Subtitle); },
+                                                    .active = [&window] { return window.isTracksOpen(TrackKind::Subtitle); }});
     commands.define(CommandId::ShowPlaybackSettings, {.label = L"Playback Settings", .icon = L"playback-settings"});
     commands.define(CommandId::ToggleQueue, {.label = L"Queue",
                                              .icon = L"lists",

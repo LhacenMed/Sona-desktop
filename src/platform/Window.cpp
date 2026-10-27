@@ -579,16 +579,15 @@ View *Window::viewAt(Point point) const
 {
     if (!m_root)
         return nullptr;
-    // While something floats over the content, the rest takes no part, as behind native menus and
-    // flyouts: it doesn't hover, show its pointer or tooltip, or scroll, and a click there only
-    // closes what floats.
-    if (isUnderPopup())
-        return nullptr;
     const Rect &content = m_root->frame();
     const Point local{point.x - content.x, point.y - content.y};
-    if (View *hit = m_overlay->hitTest(local))
-        return hit;
-    return m_root->hitTest(local);
+    View *hit = m_overlay->hitTest(local);
+    if (!hit)
+        hit = m_root->hitTest(local);
+    // While something floats over the content, the rest takes no part, as behind native menus and
+    // flyouts: it doesn't hover, show its pointer or tooltip, or scroll, and a click there only
+    // closes what floats. What acts on popups itself (a panel's button) still does.
+    return !isUnderPopup() || (hit && hit->actsOnPopups()) ? hit : nullptr;
 }
 
 RECT Window::contentToClientPixels(const Rect &rect) const
@@ -724,13 +723,14 @@ void Window::pointerLeft()
 void Window::pointerPressed(Point point)
 {
     m_overlay->hideTooltip();
-    // A click outside an open popup only closes it. A menu's submenu is left to the menu's rows
-    // (Menu): clicking its own row keeps it, another row replaces or closes it.
-    if (m_popup && m_frame != WindowFrame::Popup) {
+    View *target = viewAt(point);
+    // A click outside an open popup only closes it, unless it's on what acts on popups (viewAt). A
+    // menu's submenu is left to the menu's rows (Menu): clicking its own row keeps it, another row
+    // replaces or closes it.
+    if (isUnderPopup() && !target) {
         closePopup();
         return;
     }
-    View *target = viewAt(point);
     // The clicked view takes the focus, or the nearest view around it that accepts it (a list, for
     // a click on one of its rows).
     View *focus = target;

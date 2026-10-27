@@ -1,7 +1,9 @@
 #include "playback/Player.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <iterator>
@@ -19,12 +21,35 @@ constexpr libvlc_event_e watchedEvents[] = {
     libvlc_MediaPlayerOpening, libvlc_MediaPlayerPlaying,      libvlc_MediaPlayerPaused,
     libvlc_MediaPlayerStopped, libvlc_MediaPlayerEndReached,   libvlc_MediaPlayerEncounteredError,
     libvlc_MediaPlayerTimeChanged, libvlc_MediaPlayerLengthChanged, libvlc_MediaPlayerVout,
-    libvlc_MediaPlayerAudioVolume,
+    libvlc_MediaPlayerAudioVolume, libvlc_MediaPlayerESAdded,     libvlc_MediaPlayerESDeleted,
+    libvlc_MediaPlayerESSelected,  libvlc_MediaPlayerAudioDevice,
 };
 
 // The largest preview picture, in pixels: twice Figma's 252×142 thumbnail, for high-DPI screens.
 constexpr unsigned previewMaxWidth = 504;
 constexpr unsigned previewMaxHeight = 284;
+
+// What the tracks panel calls libVLC's "Disable" (Figma).
+constexpr wchar_t noTrackName[] = L"None";
+
+// A file's URI, as libVLC takes a slave's: file:///C:/My%20Subtitles/a.srt, or file://server/share/a.srt.
+std::string fileUri(const std::wstring &path)
+{
+    const std::string utf8 = toUtf8(path);
+    std::string uri = utf8.starts_with("\\\\") ? "file:" : "file:///";
+    for (const char c : utf8) {
+        if (c == '\\') {
+            uri += '/';
+        } else if (std::isalnum(static_cast<unsigned char>(c)) || std::strchr("-._~:/", c)) {
+            uri += c;
+        } else {
+            char escaped[4];
+            std::snprintf(escaped, sizeof escaped, "%%%02X", static_cast<unsigned char>(c));
+            uri += escaped;
+        }
+    }
+    return uri;
+}
 
 // Selects the track after the current one in a libVLC track list (which starts with "Disable"),
 // wrapping around.
@@ -115,7 +140,11 @@ void Player::onEvent(const libvlc_event_t *event, void *opaque)
     auto *self = static_cast<Player *>(opaque);
     const int type = event->type;
     const int videoOutputCount = type == libvlc_MediaPlayerVout ? event->u.media_player_vout.new_count : 0;
-    self->m_engine.runOnUiThread([self, type, videoOutputCount] { self->handleEvent(type, videoOutputCount); });
+    const int addedSubtitle = type == libvlc_MediaPlayerESAdded && event->u.media_player_es_changed.i_type == libvlc_track_text
+                                  ? event->u.media_player_es_changed.i_id
+                                  : -1;
+    self->m_engine.runOnUiThread(
+        [self, type, videoOutputCount, addedSubtitle] { self->handleEvent(type, videoOutputCount, addedSubtitle); });
 }
 
 unsigned Player::previewFormat(void **opaque, char *chroma, unsigned *width, unsigned *height, unsigned *pitches, unsigned *lines)
@@ -163,7 +192,7 @@ void Player::previewDisplay(void *opaque, void *)
     });
 }
 
-void Player::handleEvent(int type, int videoOutputCount)
+void Player::handleEvent(int type, int videoOutputCount, int addedSubtitle)
 {
     libvlc_media_player_t *player = m_player;
     if (!player)
@@ -190,6 +219,23 @@ void Player::handleEvent(int type, int videoOutputCount)
             libvlc_media_release(media);
         }
         readChapters();
+        readTracks();
+        readAudioDevices();
+        break;
+    case libvlc_MediaPlayerESAdded:
+        // A subtitle file added is the next subtitle track to appear.
+        if (addedSubtitle >= 0 && !m_loadingSubtitles.empty()) {
+            m_externalSubtitles.push_back({addedSubtitle, std::move(m_loadingSubtitles.front())});
+            m_loadingSubtitles.pop_front();
+        }
+        readTracks();
+        break;
+    case libvlc_MediaPlayerESDeleted:
+    case libvlc_MediaPlayerESSelected:
+        readTracks();
+        break;
+    case libvlc_MediaPlayerAudioDevice:
+        readAudioDevices();
         break;
     case libvlc_MediaPlayerAudioVolume:
         if (libvlc_audio_get_volume(player) != m_volume)
@@ -231,6 +277,50 @@ void Player::readChapters()
         libvlc_chapter_descriptions_release(chapters, count);
 }
 
+void Player::readTracks()
+{
+    libvlc_media_player_t *player = m_player;
+    // In TrackKind's order.
+    libvlc_track_description_t *const lists[] = {libvlc_video_get_track_description(player),
+                                                  libvlc_audio_get_track_description(player),
+                                                  libvlc_video_get_spu_description(player)};
+    const int current[] = {libvlc_video_get_track(player), libvlc_audio_get_track(player), libvlc_video_get_spu(player)};
+    std::vector<Track> external;
+    for (size_t kind = 0; kind < m_tracks.size(); ++kind) {
+        std::vector<Track> &tracks = m_tracks[kind];
+        tracks = {{-1, noTrackName}};
+        for (const libvlc_track_description_t *track = lists[kind]; track; track = track->p_next) {
+            if (track->i_id < 0)
+                continue;
+            const auto added = std::ranges::find(m_externalSubtitles, track->i_id, &Track::id);
+            if (added != m_externalSubtitles.end())
+                external.push_back(*added);
+            else
+                tracks.push_back({track->i_id, track->psz_name ? fromUtf8(track->psz_name) : std::wstring()});
+        }
+        if (lists[kind])
+            libvlc_track_description_list_release(lists[kind]);
+        m_currentTracks[kind] = current[kind];
+    }
+    m_externalSubtitles = std::move(external);
+}
+
+void Player::readAudioDevices()
+{
+    libvlc_media_player_t *player = m_player;
+    m_audioDevices.clear();
+    libvlc_audio_output_device_t *devices = libvlc_audio_output_device_enum(player);
+    for (const libvlc_audio_output_device_t *device = devices; device; device = device->p_next) {
+        m_audioDevices.push_back({device->psz_device ? device->psz_device : "",
+                                  device->psz_description ? fromUtf8(device->psz_description) : std::wstring()});
+    }
+    libvlc_audio_output_device_list_release(devices);
+    // None selected means the default device.
+    char *current = libvlc_audio_output_device_get(player);
+    m_audioDevice = current ? current : "";
+    libvlc_free(current);
+}
+
 libvlc_media_t *Player::newMedia(const std::wstring &location) const
 {
     const std::string utf8 = toUtf8(location);
@@ -264,6 +354,10 @@ void Player::open(const std::wstring &location, double startTime)
     m_artist.clear();
     m_folderName = isUrl(location) ? std::wstring() : std::filesystem::path(location).parent_path().filename().wstring();
     m_chapters.clear();
+    m_tracks.fill({{-1, noTrackName}});
+    m_currentTracks.fill(-1);
+    m_externalSubtitles.clear();
+    m_loadingSubtitles.clear();
     changed.emit();
 
     m_engine.post([this, location, startTime] {
@@ -408,6 +502,64 @@ void Player::cycleAudioTrack()
         if (libvlc_media_player_t *player = m_player)
             selectNextTrack(player, libvlc_audio_get_track_description, libvlc_audio_get_track, libvlc_audio_set_track);
     });
+}
+
+void Player::selectTrack(TrackKind kind, int id)
+{
+    // Shown at once; libVLC confirms as it switches.
+    m_currentTracks[static_cast<size_t>(kind)] = id;
+    changed.emit();
+    m_engine.post([this, kind, id] {
+        libvlc_media_player_t *player = m_player;
+        if (!player)
+            return;
+        switch (kind) {
+        case TrackKind::Video:
+            libvlc_video_set_track(player, id);
+            break;
+        case TrackKind::Audio:
+            libvlc_audio_set_track(player, id);
+            break;
+        case TrackKind::Subtitle:
+            libvlc_video_set_spu(player, id);
+            break;
+        }
+    });
+}
+
+void Player::addSubtitleFile(const std::wstring &path)
+{
+    const std::wstring name = std::filesystem::path(path).filename().wstring();
+    m_loadingSubtitles.push_back(name);
+    m_engine.post([this, name, uri = fileUri(path)] {
+        libvlc_media_player_t *player = m_player;
+        if (player && libvlc_media_player_add_slave(player, libvlc_media_slave_type_subtitle, uri.c_str(), true) == 0)
+            return;
+        // It won't load, so it names no track.
+        m_engine.runOnUiThread([this, name] {
+            if (const auto loading = std::ranges::find(m_loadingSubtitles, name); loading != m_loadingSubtitles.end())
+                m_loadingSubtitles.erase(loading);
+        });
+    });
+}
+
+void Player::setAudioDevice(const std::string &id)
+{
+    // Shown at once; libVLC confirms as it moves.
+    m_audioDevice = id;
+    changed.emit();
+    m_engine.post([this, id] {
+        if (libvlc_media_player_t *player = m_player)
+            libvlc_audio_output_device_set(player, nullptr, id.c_str());
+    });
+}
+
+void Player::refreshAudioDevices()
+{
+    if (!m_player)
+        return;
+    readAudioDevices();
+    changed.emit();
 }
 
 void Player::takeSnapshot()

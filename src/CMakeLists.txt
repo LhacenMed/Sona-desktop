@@ -50,6 +50,7 @@ add_executable(sona WIN32
     player/SeekPreview.cpp
     player/TimeLabel.cpp
     player/TitleBar.cpp
+    player/TracksPanel.cpp
     player/VideoHost.cpp
     player/VideoView.cpp
     player/VolumeBar.cpp

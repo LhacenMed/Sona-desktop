@@ -110,8 +110,8 @@ Setup.
 | Design tokens | Dark/Light palettes, 9 accent colours, theme mode (Light/Dark/System) | `style/Theme` |
 | Settings | Registry store; 5 settings (onboardingCompleted, theme, accentIndex, mediaFolder, showRemainingTime) | `settings/` |
 | Data | SQLite (vendored in `third_party/sqlite`) in `%LOCALAPPDATA%\Sona\sona.db` with versioned migrations; bookmarks per media; the playback history (positions, play counts) | `data/` |
-| Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, snapshot, stop on close, chapters, durations read ahead once the media plays; seeks coalesced; the seek bar's preview decoded by a second, silent player at keyframes, the video seeking once, exactly, where the bar is let go; the queue (play order, repeat off/all/one, shuffle, move, sort, remove), the one place media is opened from; folders expand to their media in Explorer's order | `playback/Player`, `Queue`, `MediaFiles` |
-| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on whenever media is opened), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop (into the queue while it's open), "Open with", Open File(s) and Open Folder; the queue panel (Queue, Bookmarks, Chapters tabs) docked over the video, its button active while it's open; a click on a row plays it or jumps to it; bookmarks marked on the seek bar (hover for the name, click to jump); hovering or dragging the seek bar previews that moment and its time above the pointer (`thumbnail 2151:9673`) | `player/`, `maininterface/` |
+| Playback | libVLC on an engine thread: open, play/pause, seek, volume 0–200, mute, next frame, cycle subtitle/audio track, choose any video/audio/subtitle track, add subtitle files, list and choose the audio output device, snapshot, stop on close, chapters, durations read ahead once the media plays; seeks coalesced; the seek bar's preview decoded by a second, silent player at keyframes, the video seeking once, exactly, where the bar is let go; the queue (play order, repeat off/all/one, shuffle, move, sort, remove), the one place media is opened from; folders expand to their media in Explorer's order | `playback/Player`, `Queue`, `MediaFiles` |
+| Player UI | Video in its rounded frame; title and control bars built from a layout definition (`BarLayout`), fixed with the video between them or auto-hiding over it (Hide UI / Show UI; on whenever media is opened), each sliding in near its edge and out when the pointer leaves (windowed and full screen); the pointer hides over playing video; main menu and right-click menu with submenus; duration/time-left toggle; volume value while dragging; on-screen message for each shortcut; keyboard shortcuts, drag and drop (into the queue while it's open), "Open with", Open File(s) and Open Folder; the queue panel (Queue, Bookmarks, Chapters tabs) docked over the video, its button active while it's open; a click on a row plays it or jumps to it; bookmarks marked on the seek bar (hover for the name, click to jump); hovering or dragging the seek bar previews that moment and its time above the pointer (`thumbnail 2151:9673`); the tracks panel (Video, Audio, Subtitles tabs; the Audio and Subtitles buttons open it at theirs, or switch to it, in one click): the media's tracks with the current one checked, a click switching to another, subtitle files added from the computer (External Tracks), the audio output device with a refresh | `player/`, `maininterface/` |
 | Library | Shown while nothing plays (Figma Home `6261:15078`), stopping and the queue's end return to it: navigation (Home; the other sections dimmed until built), back/forward, breadcrumb, item count, sort (Figma's options; those needing metadata disabled), grid/list, search (Ctrl+E), more (Add File, Add Folder); Home's Continue Watching (resumes), Listen Again and Frequently Visited Folders from the history, each opening in full; thumbnails from Windows' cache | `library/` |
 | Onboarding | Welcome + media folder, theme + accent with live preview, shortcuts guide | `onboarding/` |
 | Packaging | Release build, libVLC deploy with plugin cache, per-user installer | `cmake/`, `platform/windows/` |
@@ -120,7 +120,7 @@ Setup.
 
 Everything in [section 5](#5-ui-specification) beyond the above:
 
-- the tracks and preferences panels, the library's other sections (Videos, Music, Network, Playlists,
+- the preferences panel, the library's other sections (Videos, Music, Network, Playlists,
   Recent, pins), its indexer, the compact sidebar and miniplayer, all dialogs and the settings window
 - music view, miniplayer, customize player, profiles, light-theme review
 
@@ -144,6 +144,8 @@ value field (a `Slider` next to a `TextField`, composed where P5 needs it).
   they're opaque. Their highlighted rows take the shared hover overlay rather than Figma's opaque
   BG/A2, which barely shows on a frosted Dark surface.
 - The right-click menu shows Record as Shift+R (decision D3), not R.
+- The tracks panel's Audio tab has no External Tracks, as in Figma (5.3 lists it for Audio too); its
+  track names are libVLC's ("Track 1 - [English]").
 - "VLC" becomes "Sona" (title, menu items, onboarding text).
 - The onboarding welcome text is shortened, and the logo is Sona's.
 
@@ -711,7 +713,7 @@ Each phase ends with something visible and checkable.
 | **P11 Polish** | all | Light theme pass, accessibility (UI Automation names, keyboard focus), performance (startup < 300 ms, idle memory), installer associations | Both themes match Figma; Narrator reads the controls. |
 
 Progress: P0 (foundation, playback, onboarding, packaging), P1 (toolkit and commands), P2 (player
-chrome) and P3 (queue) are done; P6 has its library window and Home. Next: **P4**.
+chrome), P3 (queue) and P4 (tracks) are done; P6 has its library window and Home. Next: **P5**.
 
 ---
 

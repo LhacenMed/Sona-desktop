@@ -17,6 +17,8 @@ std::wstring displayName(const std::wstring &location);
 bool sortsBefore(const std::wstring &a, const std::wstring &b);
 // Media files, for the file pickers.
 FileType mediaFileType();
+// Subtitle files, for the subtitle file picker.
+FileType subtitleFileType();
 // The media in what was opened or dropped: files as they are, each folder as the media files in it
 // and its subfolders in Explorer's order, URLs as they are. Paths become canonical: absolute, with
 // long names in their own case.

@@ -2,7 +2,9 @@
 
 #include <windows.h>
 
+#include <array>
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -24,6 +26,27 @@ struct Chapter
     double time;
 
     bool operator==(const Chapter &) const = default;
+};
+
+// The kinds of track a media can play one of, in the tracks panel's order.
+enum class TrackKind { Video, Audio, Subtitle };
+
+struct Track
+{
+    // libVLC's id; -1 for none.
+    int id;
+    std::wstring name;
+
+    bool operator==(const Track &) const = default;
+};
+
+struct AudioDevice
+{
+    // libVLC's identifier; empty for the system's default device.
+    std::string id;
+    std::wstring name;
+
+    bool operator==(const AudioDevice &) const = default;
 };
 
 // The playback engine: owns libVLC and mirrors the player's state for the UI. libVLC is the single
@@ -61,6 +84,16 @@ public:
     const std::wstring &folderName() const { return m_folderName; }
     // The playing media's chapters, in order; empty for media without any.
     const std::vector<Chapter> &chapters() const { return m_chapters; }
+    // The playing media's own tracks of `kind`, "None" (id -1) first; subtitles added from files
+    // aren't among them.
+    const std::vector<Track> &tracks(TrackKind kind) const { return m_tracks[static_cast<size_t>(kind)]; }
+    // The subtitles added from files (addSubtitleFile) once they load, named after their files.
+    const std::vector<Track> &externalSubtitles() const { return m_externalSubtitles; }
+    // The id of the track of `kind` that plays, or -1.
+    int currentTrack(TrackKind kind) const { return m_currentTracks[static_cast<size_t>(kind)]; }
+    // Where the sound can play; the identifier of where it does.
+    const std::vector<AudioDevice> &audioDevices() const { return m_audioDevices; }
+    const std::string &audioDevice() const { return m_audioDevice; }
 
     // The window libVLC draws video into.
     void setVideoWindow(HWND window);
@@ -83,6 +116,12 @@ public:
     void nextFrame();
     void cycleSubtitleTrack();
     void cycleAudioTrack();
+    void selectTrack(TrackKind kind, int id);
+    // Adds a subtitle file to the playing media and shows it.
+    void addSubtitleFile(const std::wstring &path);
+    void setAudioDevice(const std::string &id);
+    // Lists the audio devices again, as devices come and go without libVLC saying so.
+    void refreshAudioDevices();
     // Saves the current frame to Pictures\Sona.
     void takeSnapshot();
     // Stops playback and releases the video window, then runs `done` on the UI thread.
@@ -111,10 +150,13 @@ private:
     static void onParsed(const libvlc_event_t *event, void *request);
 
     void startEngine();
-    void handleEvent(int type, int videoOutputCount);
+    // `addedSubtitle`: the id of the subtitle track an ESAdded event adds, or -1.
+    void handleEvent(int type, int videoOutputCount, int addedSubtitle);
     void sync();
     void applyAudio();
     void readChapters();
+    void readTracks();
+    void readAudioDevices();
     libvlc_media_t *newMedia(const std::wstring &location) const;
     // Opens `location` in the preview player, paused at `seconds`, unless it's open there already.
     void openPreviewMedia(const std::wstring &location, double seconds);
@@ -146,6 +188,14 @@ private:
     std::wstring m_artist;
     std::wstring m_folderName;
     std::vector<Chapter> m_chapters;
+    std::array<std::vector<Track>, 3> m_tracks;
+    std::array<int, 3> m_currentTracks{-1, -1, -1};
+    std::vector<Track> m_externalSubtitles;
+    // The names of the subtitle files added and not loaded yet, in the order they were added; each
+    // names the next subtitle track that appears.
+    std::deque<std::wstring> m_loadingSubtitles;
+    std::vector<AudioDevice> m_audioDevices;
+    std::string m_audioDevice;
     std::wstring m_location;
     // From open until the media plays (or fails), with the duration reads waiting for it.
     bool m_opening = false;
