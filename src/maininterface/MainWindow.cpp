@@ -2,6 +2,8 @@
 
 #include <shellapi.h>
 
+#include "library/LibraryItems.h"
+#include "library/LibraryView.h"
 #include "maininterface/MainCommands.h"
 #include "maininterface/MainMenus.h"
 #include "onboarding/OnboardingWindow.h"
@@ -23,10 +25,21 @@ namespace {
 constexpr float mainMenuWidth = 375;
 constexpr float contextMenuWidth = 292;
 
+// The window's content: the player and the library, each as large as the window; one shows.
+class Screens : public View
+{
+public:
+    void layout() override
+    {
+        for (const auto &screen : children())
+            screen->setFrame(bounds());
+    }
+};
+
 } // namespace
 
 MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &settings, Player &player, Queue &queue,
-                       Bookmarks &bookmarks)
+                       Bookmarks &bookmarks, History &history, Thumbnails &thumbnails)
     : Window(graphics, theme)
     , m_settings(settings)
     , m_player(player)
@@ -37,15 +50,20 @@ MainWindow::MainWindow(GraphicsDevice &graphics, Theme &theme, SettingsStore &se
     m_videoHost = std::make_unique<VideoHost>(hwnd());
     player.setVideoWindow(m_videoHost->hwnd());
 
-    auto view = std::make_unique<PlayerView>(BarContext{player, bookmarks, settings, m_commands, [this](View &button) {
+    const BarContext barContext{player, bookmarks, settings, m_commands, [this](View &button) {
         Menu::open(*this, button.mapToWindow(button.bounds()), PopupPlacement::Below, mainMenuItems(), m_commands, mainMenuWidth);
-    }}, queue);
-    m_playerView = view.get();
-    setRoot(std::move(view));
-    updateTitle();
+    }};
+    auto screens = std::make_unique<Screens>();
+    m_playerView = &screens->add<PlayerView>(barContext, queue);
+    m_libraryView = &screens->add<LibraryView>(
+        barContext, LibraryContext{history, thumbnails, settings, m_commands,
+                                   [this](const LibraryItem &item) { openMedia({item.location}, item.resumeAt); }});
+    setRoot(std::move(screens));
+    updateScreen();
 
     DragAcceptFiles(hwnd(), TRUE);
     m_playerSubscription = player.changed.connect([this] { updateTitle(); });
+    m_queueSubscription = queue.changed.connect([this] { updateScreen(); });
 }
 
 MainWindow::~MainWindow() = default;
@@ -55,10 +73,10 @@ void MainWindow::showOnboarding()
     openWindow<OnboardingWindow>(graphics(), theme(), m_playerView->barContext(), hwnd());
 }
 
-void MainWindow::openMedia(const std::vector<std::wstring> &opened)
+void MainWindow::openMedia(const std::vector<std::wstring> &opened, double startTime)
 {
     setBarsAutoHide(true);
-    m_queue.open(opened);
+    m_queue.open(opened, startTime);
 }
 
 bool MainWindow::barsAutoHide() const
@@ -81,6 +99,32 @@ bool MainWindow::isQueueOpen() const
 void MainWindow::toggleQueue()
 {
     m_playerView->toggleQueue();
+}
+
+bool MainWindow::isLibraryShown() const
+{
+    return m_libraryView->isVisible();
+}
+
+void MainWindow::focusLibrarySearch()
+{
+    m_libraryView->focusSearch();
+}
+
+void MainWindow::updateScreen()
+{
+    const bool playing = m_queue.current() >= 0;
+    if (playing == m_playerView->isVisible() && playing != m_libraryView->isVisible()) {
+        updateTitle();
+        return;
+    }
+    // A panel or menu belongs to the screen it opened over.
+    closePopup();
+    m_playerView->setVisible(playing);
+    m_libraryView->setVisible(!playing);
+    m_videoHost->setVisible(playing);
+    updateTitle();
+    invalidate();
 }
 
 void MainWindow::layoutChanged()
@@ -152,7 +196,7 @@ void MainWindow::openFolder()
 
 void MainWindow::updateTitle()
 {
-    const std::wstring title = m_player.title().empty() ? SONA_APP_NAME : m_player.title();
+    const std::wstring title = m_queue.current() < 0 || m_player.title().empty() ? SONA_APP_NAME : m_player.title();
     if (title == m_title)
         return;
     m_title = title;

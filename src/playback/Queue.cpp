@@ -17,7 +17,7 @@ Queue::Queue(Player &player)
     });
     m_endedSubscription = player.ended.connect([this] { playedToEnd(); });
     // An item that can't play is skipped, never repeated.
-    m_failedSubscription = player.failed.connect([this] { play(step(1, false)); });
+    m_failedSubscription = player.failed.connect([this] { playOrStop(step(1, false)); });
 }
 
 double Queue::totalDuration() const
@@ -44,7 +44,7 @@ void Queue::toggleShuffle()
     changed.emit();
 }
 
-void Queue::open(const std::vector<std::wstring> &opened)
+void Queue::open(const std::vector<std::wstring> &opened, double startTime)
 {
     const std::vector<std::wstring> locations = mediaLocations(opened);
     if (locations.empty())
@@ -53,7 +53,7 @@ void Queue::open(const std::vector<std::wstring> &opened)
     m_shuffleOrder.clear();
     m_current = -1;
     add(locations);
-    play(m_shuffles ? indexOf(m_shuffleOrder.front()) : 0);
+    play(m_shuffles ? indexOf(m_shuffleOrder.front()) : 0, startTime);
     readDurations(0);
 }
 
@@ -98,13 +98,28 @@ void Queue::readDurations(int first)
     }
 }
 
-void Queue::play(int index)
+void Queue::play(int index, double startTime)
 {
     if (index < 0 || index >= static_cast<int>(m_items.size()))
         return;
     m_current = index;
-    m_player.open(m_items[index].location);
+    m_player.open(m_items[index].location, startTime);
     changed.emit();
+}
+
+void Queue::stop()
+{
+    m_current = -1;
+    m_player.stop([] {});
+    changed.emit();
+}
+
+void Queue::playOrStop(int index)
+{
+    if (index < 0)
+        stop();
+    else
+        play(index);
 }
 
 void Queue::previous()
@@ -139,11 +154,11 @@ void Queue::remove(int index)
     std::erase(m_shuffleOrder, m_items[index].id);
     m_items.erase(m_items.begin() + index);
     if (index == m_current) {
-        m_current = -1;
-        m_player.stop([] {});
-    } else if (index < m_current) {
-        --m_current;
+        stop();
+        return;
     }
+    if (index < m_current)
+        --m_current;
     changed.emit();
 }
 
@@ -193,5 +208,5 @@ void Queue::shuffle()
 
 void Queue::playedToEnd()
 {
-    play(m_repeat == Repeat::One ? m_current : step(1, m_repeat == Repeat::All));
+    playOrStop(m_repeat == Repeat::One ? m_current : step(1, m_repeat == Repeat::All));
 }

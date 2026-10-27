@@ -52,6 +52,10 @@ void ScrollView::layout()
 {
     if (!m_content)
         return;
+    // The width first: the content's height can depend on it (a grid that wraps).
+    const Rect &content = m_content->frame();
+    if (content.width != frame().width)
+        m_content->setFrame({content.x, content.y, frame().width, content.height});
     m_contentHeight = m_content->preferredSize().height;
     // A resize can leave the content scrolled past its end.
     const float offset = std::min(m_offset.target(), maxOffset());

@@ -13,15 +13,15 @@ between features:
 | --- | --- |
 | `app/` | `wWinMain`: creates the services below in order and runs the message loop. |
 | `core/` | Platform-free primitives: `Geometry` (DIPs), `Color`, `Signal`/`Subscription`, UTF-8 conversion, `TimeText` (how times are written). |
-| `platform/` | Win32: `Window` (custom frame with native behavior), embedded `Resources`, `FileDialogs`, `KnownFolders`, `SystemTheme`, installer files under `windows/`. |
+| `platform/` | Win32: `Window` (custom frame with native behavior), embedded `Resources`, `FileDialogs`, `KnownFolders`, `SystemTheme`, `WorkerThread` (a background thread that hands results back to the UI thread), `ShellThumbnail` (Windows' thumbnail cache), installer files under `windows/`. |
 | `graphics/` | `GraphicsDevice` (D3D11, D2D, DComp, DWrite with the bundled font), `WindowSurface` (per-window swap chain), `Canvas` (the drawing API), `BackdropCapture` (a window as Windows composes it, video included, for frosted popups to blur). |
 | `style/` | The design system: `Theme` (Figma tokens resolved for theme and accent), `Surface` (the raised surfaces: menu, list, callout, panel; frosted ones blur what's behind them), `Typography`. |
 | `settings/` | `SettingsStore` (registry) and `AppSettings` (every preference, declared once). |
-| `data/` | `Database` (SQLite, `%LOCALAPPDATA%\Sona\sona.db`, its migrations) and the stores on it: `Bookmarks`. |
+| `data/` | `Database` (SQLite, `%LOCALAPPDATA%\Sona\sona.db`, its migrations) and the stores on it: `Bookmarks`, `History` (each media played, where it was left). |
 | `commands/` | `CommandRegistry`: every user action (`CommandId`) with its shortcuts and what it runs. |
 | `widgets/` | The toolkit: `View`, `Row`/`Column` (`Stack`), `ScrollView`, `Overlay` (tooltips, values, messages), `Menu`, `Label`, `Icon`, `IconButton`, `CaptionButton`, `WindowButtons`, `Button`, `Toggle`, `Segmented`, `Dropdown`, `Slider`, `Tabs`, `ListRow`, `TextField`, `ListView`, `DialogWindow`, `Animation`. |
 | `playback/` | `Player`: the only code that includes libVLC. `Queue`: what plays next, the one place media is opened from. `MediaFiles`: what counts as media and how folders expand. |
-| `player/`, `maininterface/`, `onboarding/` | Feature UI: the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`; `QueuePanel`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
+| `player/`, `library/`, `maininterface/`, `onboarding/` | Feature UI: the library (`LibraryView`: navigation, header, Home's sections from the history by `LibraryItems`; `Thumbnails`; `HistoryRecorder`, which keeps the history as media plays), the player (`PlayerView`: video, both bars and their auto-hide; the bars built from `BarLayout` by `BarItems`; `QueuePanel`), the main window with its commands and menus (`MainCommands`, `MainMenus`), first-run onboarding. |
 | `gallery/` | Debug builds only (`sona.exe --gallery`): every widget on one page, for checking against Figma. |
 
 ## Rules that keep it consistent
@@ -67,6 +67,8 @@ between features:
   a fixed-size window with an owner is modal.
 - **Animation needs no timer.** An `Animation` read during paint schedules the next frame until it
   arrives; presenting waits for the display. `Timer` is for delays (tooltips, caret blink).
+- **The window shows the player while the queue plays, the library otherwise.** Stopping, and the
+  queue playing out, go back to the library (`MainWindow::updateScreen`).
 - **Media opens through the `Queue`.** Opening, dropping and the command line all go to `Queue::open`
   or `append`; only the queue calls `Player::open`.
 - **Playback starts first.** Seeks collapse into the latest target; duration reads wait until the

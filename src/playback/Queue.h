@@ -23,7 +23,8 @@ struct QueueItem
 
 // What plays next (ROADMAP 5.3): the items, which one is playing, and how the queue moves on. The
 // queue is the one place media is opened from. It plays one item at a time through the Player and
-// moves to the next as each one ends, by the repeat mode and in shuffled order when shuffling.
+// moves to the next as each one ends, by the repeat mode and in shuffled order when shuffling. Once
+// nothing is left to play, it stops: nothing is current.
 class Queue
 {
 public:
@@ -41,11 +42,14 @@ public:
     bool shuffles() const { return m_shuffles; }
     void toggleShuffle();
 
-    // Replaces the queue with the media in `opened` (see mediaLocations) and plays the first.
-    void open(const std::vector<std::wstring> &opened);
+    // Replaces the queue with the media in `opened` (see mediaLocations) and plays the first, from
+    // `startTime` seconds in.
+    void open(const std::vector<std::wstring> &opened, double startTime = 0);
     // Adds the media in `opened` to the end; with nothing playing, the first added plays.
     void append(const std::vector<std::wstring> &opened);
-    void play(int index);
+    void play(int index, double startTime = 0);
+    // Stops playing; the items stay, none of them current.
+    void stop();
     bool hasPrevious() const { return step(-1, m_repeat == Repeat::All) >= 0; }
     bool hasNext() const { return step(1, m_repeat == Repeat::All) >= 0; }
     void previous();
@@ -72,6 +76,8 @@ private:
     // A new play order for shuffling, which starts with the playing item.
     void shuffle();
     void playedToEnd();
+    // Plays the item at `index`, or stops when there's none (-1).
+    void playOrStop(int index);
 
     Player &m_player;
     std::vector<QueueItem> m_items;

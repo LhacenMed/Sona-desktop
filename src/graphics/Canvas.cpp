@@ -3,6 +3,7 @@
 #include <d2d1effects.h>
 #include <Shlwapi.h>
 
+#include <algorithm>
 #include <format>
 #include <string>
 
@@ -38,6 +39,7 @@ void Canvas::bind(ID2D1DeviceContext5 *context)
 {
     m_context = context;
     m_svgDocuments.clear();
+    m_pictureBitmaps.clear();
     m_brush.Reset();
     check(context->CreateSolidColorBrush(D2D1::ColorF(0, 0), &m_brush));
     m_recorder.Reset();
@@ -266,6 +268,29 @@ void Canvas::drawPixels(const Rect &rect, const std::uint32_t *pixels, int width
                                   D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)),
                                   &bitmap));
     m_context->DrawBitmap(bitmap.Get(), toD2D(rect), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+}
+
+void Canvas::drawPicture(const Rect &rect, const std::shared_ptr<const Picture> &picture)
+{
+    PictureBitmap &cached = m_pictureBitmaps[picture.get()];
+    // Another picture may since have taken a gone one's address.
+    if (cached.picture.lock() != picture) {
+        // The gone pictures' bitmaps go first.
+        std::erase_if(m_pictureBitmaps, [](const auto &entry) { return entry.second.picture.expired(); });
+        PictureBitmap &entry = m_pictureBitmaps[picture.get()];
+        entry.picture = picture;
+        check(m_context->CreateBitmap(
+            D2D1::SizeU(picture->width, picture->height), picture->pixels.data(), picture->width * 4,
+            D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)), &entry.bitmap));
+    }
+    const PictureBitmap &entry = m_pictureBitmaps.at(picture.get());
+    // The largest part of the picture with the rectangle's shape, from its middle.
+    const float scale = std::max(rect.width / picture->width, rect.height / picture->height);
+    const float width = rect.width / scale;
+    const float height = rect.height / scale;
+    const D2D1_RECT_F source{(picture->width - width) / 2, (picture->height - height) / 2, (picture->width + width) / 2,
+                             (picture->height + height) / 2};
+    m_context->DrawBitmap(entry.bitmap.Get(), toD2D(rect), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, source);
 }
 
 void Canvas::drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps)

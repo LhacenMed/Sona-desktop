@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -13,6 +14,7 @@
 
 #include "core/Color.h"
 #include "core/Geometry.h"
+#include "core/Picture.h"
 #include "graphics/TextStyle.h"
 
 class GraphicsDevice;
@@ -85,6 +87,9 @@ public:
     void drawText(std::wstring_view text, const Rect &rect, const TextStyle &style, Color color);
     // Draws a picture from memory (32-bit BGR pixels, top row first) stretched to `rect`.
     void drawPixels(const Rect &rect, const std::uint32_t *pixels, int width, int height);
+    // Draws a picture over all of `rect`, its middle cropped to the rectangle's shape (as a Figma
+    // image fill set to Fill). Its bitmap is kept for as long as the picture is.
+    void drawPicture(const Rect &rect, const std::shared_ptr<const Picture> &picture);
     // Draws an SVG from assets/ stretched to `rect`.
     void drawSvg(std::wstring_view assetPath, const Rect &rect, std::initializer_list<ColorSwap> swaps = {});
 
@@ -104,6 +109,13 @@ private:
     D2D1::Matrix3x2F m_transform = D2D1::Matrix3x2F::Identity();
     std::vector<D2D1::Matrix3x2F> m_savedTransforms;
     std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1SvgDocument>> m_svgDocuments;
+    // The bitmaps of the pictures drawn, each with its picture, to tell when that one is gone.
+    struct PictureBitmap
+    {
+        std::weak_ptr<const Picture> picture;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap> bitmap;
+    };
+    std::unordered_map<const Picture *, PictureBitmap> m_pictureBitmaps;
     // Kept across frames: the backdrop as a bitmap (until its image or the DPI changes), and the
     // effects that crop and blur it.
     ID3D11Texture2D *m_backdropImage = nullptr;

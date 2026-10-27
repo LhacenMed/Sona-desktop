@@ -54,3 +54,10 @@ inline const BarLayout defaultBarLayout{
         {0, {BarItem::Queue}},
     },
 };
+
+// The library's title bar (Figma "Player" 6261:15078), which isn't customized: the logo and the main
+// menu, then full screen.
+inline const BarLayout libraryBarLayout{
+    .titleLeading = {{0, {BarItem::Logo, BarItem::MainMenu}}},
+    .titleTrailing = {{0, {BarItem::FullScreen}}},
+};

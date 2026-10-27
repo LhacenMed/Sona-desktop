@@ -9,11 +9,11 @@
 #include "widgets/Label.h"
 #include "widgets/WindowButtons.h"
 
-TitleBar::TitleBar(BarContext &context)
+TitleBar::TitleBar(BarContext &context, const BarLayout &layout)
 {
     m_leading = &add<Row>();
     m_leading->setFillsHeight(true);
-    addBarGroups(*m_leading, defaultBarLayout.titleLeading, context);
+    addBarGroups(*m_leading, layout.titleLeading, context);
 
     m_titleLabel = &add<Label>(
         L"", TextStyle{.size = 12, .align = TextAlign::Center, .elide = true, .font = TextFont::System}, &Palette::fg1);
@@ -24,7 +24,7 @@ TitleBar::TitleBar(BarContext &context)
     m_trailing = &add<Row>();
     m_trailing->setFillsHeight(true);
     m_trailing->add<View>().setFillsWidth(true);
-    addBarGroups(*m_trailing, defaultBarLayout.titleTrailing, context);
+    addBarGroups(*m_trailing, layout.titleTrailing, context);
     m_windowButtons = &m_trailing->add<WindowButtons>();
 }
 

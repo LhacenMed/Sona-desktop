@@ -14,6 +14,11 @@ VideoHost::VideoHost(HWND parent)
                              0, 0, 0, 0, parent, nullptr, GetModuleHandleW(nullptr), nullptr);
 }
 
+void VideoHost::setVisible(bool visible)
+{
+    ShowWindow(m_hwnd, visible ? SW_SHOWNA : SW_HIDE);
+}
+
 void VideoHost::setBounds(const RECT &bounds)
 {
     SetWindowPos(m_hwnd, nullptr, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top,

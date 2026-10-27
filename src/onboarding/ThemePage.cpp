@@ -21,7 +21,7 @@ class PlayerPreview : public View
 public:
     explicit PlayerPreview(const BarContext &bars)
         : m_context(bars)
-        , m_titleBar(add<TitleBar>(m_context))
+        , m_titleBar(add<TitleBar>(m_context, defaultBarLayout))
         , m_controlBar(add<ControlBar>(m_context))
     {
     }

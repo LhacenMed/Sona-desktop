@@ -8,7 +8,8 @@
 // Scrolls one content view vertically when it's taller than the viewport: the wheel and touchpad
 // scroll it smoothly, and a scrollbar along the right edge shows where it is. Like Windows 11's, the
 // bar is a thin line that widens under the pointer; drag its thumb, or click its track to page.
-// The content is as wide as the viewport and as tall as it prefers, clipped to the viewport.
+// The content is as wide as the viewport and as tall as it prefers at that width, clipped to the
+// viewport.
 class ScrollView : public View
 {
 public:

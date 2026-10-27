@@ -7,15 +7,16 @@
 class Label;
 class WindowButtons;
 struct BarContext;
+struct BarLayout;
 
-// Figma "topbar" (247:447): the layout's leading items, the title centred on the window, the
+// Figma "topbar" (247:447): the layout's leading title items, the title centred on the window, its
 // trailing items, then Windows' minimize, maximize and close (hidden in full screen). It's as tall as
 // those buttons (Window::captionHeight); its background drags the window and the logo opens the
 // system menu.
 class TitleBar : public Row
 {
 public:
-    explicit TitleBar(BarContext &context);
+    TitleBar(BarContext &context, const BarLayout &layout);
 
     void setTitle(std::wstring title);
 

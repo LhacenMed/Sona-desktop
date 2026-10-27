@@ -17,6 +17,10 @@ constexpr const char *migrations[] = {
     // Bookmarks: a named time in a media, by its location. Times are in milliseconds.
     "CREATE TABLE bookmarks (id INTEGER PRIMARY KEY, media TEXT NOT NULL, name TEXT NOT NULL, time INTEGER NOT NULL);"
     "CREATE INDEX bookmarks_media ON bookmarks (media);",
+    // History: each media played, where it was left (milliseconds) and how often it played; when it
+    // last played in seconds since 1970.
+    "CREATE TABLE history (location TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL, audio INTEGER NOT NULL,"
+    " position INTEGER NOT NULL, duration INTEGER NOT NULL, last_played INTEGER NOT NULL, play_count INTEGER NOT NULL);",
 };
 
 [[noreturn]] void fail(sqlite3 *connection)

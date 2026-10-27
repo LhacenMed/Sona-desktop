@@ -57,8 +57,10 @@ struct Palette
     Color fgA4;
     Color fgB1;
     Color dividerBright;
+    Color dividerDim;
     Color volumeTrack;
-    // Button states shared by every button.
+    // Hover and press states shared by every control (buttons, rows, menu and list items), over
+    // whatever surface is beneath.
     Color hoverOverlay;
     Color pressedOverlay;
     Color closeHover;

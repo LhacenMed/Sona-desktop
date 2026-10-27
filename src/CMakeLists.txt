@@ -6,10 +6,18 @@ add_executable(sona WIN32
     core/TimeText.cpp
     data/Bookmarks.cpp
     data/Database.cpp
+    data/History.cpp
     graphics/BackdropCapture.cpp
     graphics/Canvas.cpp
     graphics/GraphicsDevice.cpp
     graphics/WindowSurface.cpp
+    library/HistoryRecorder.cpp
+    library/HomePage.cpp
+    library/ItemViews.cpp
+    library/LibraryItems.cpp
+    library/LibraryView.cpp
+    library/NavigationRail.cpp
+    library/Thumbnails.cpp
     maininterface/MainCommands.cpp
     maininterface/MainMenus.cpp
     maininterface/MainWindow.cpp
@@ -24,6 +32,7 @@ add_executable(sona WIN32
     platform/KnownFolders.cpp
     platform/PopupWindow.cpp
     platform/Resources.cpp
+    platform/ShellThumbnail.cpp
     platform/SystemTheme.cpp
     platform/Timer.cpp
     platform/Window.cpp

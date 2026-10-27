@@ -12,6 +12,7 @@ public:
     HWND hwnd() const { return m_hwnd; }
     // Places the video over `bounds`, in the parent's client pixels.
     void setBounds(const RECT &bounds);
+    void setVisible(bool visible);
 
 private:
     HWND m_hwnd;

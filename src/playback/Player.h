@@ -52,14 +52,20 @@ public:
     bool isMuted() const { return m_muted; }
     bool hasVideo() const { return m_hasVideo; }
     const std::wstring &title() const { return m_title; }
+    // The playing media's artist, when it names one.
+    const std::wstring &artist() const { return m_artist; }
+    // The playing media's file path or URL; empty before anything opens.
+    const std::wstring &location() const { return m_location; }
+    // From open until the media plays: until then the state above is still the previous media's.
+    bool isOpening() const { return m_opening; }
     const std::wstring &folderName() const { return m_folderName; }
     // The playing media's chapters, in order; empty for media without any.
     const std::vector<Chapter> &chapters() const { return m_chapters; }
 
     // The window libVLC draws video into.
     void setVideoWindow(HWND window);
-    // Plays a file path or a URL.
-    void open(const std::wstring &location);
+    // Plays a file path or a URL, from `startTime` seconds in.
+    void open(const std::wstring &location, double startTime = 0);
     void togglePause();
     void toggleMute();
     // Seeks exactly. Seeks made faster than libVLC takes them collapse into the latest.
@@ -137,6 +143,7 @@ private:
     bool m_muted = false;
     bool m_hasVideo = false;
     std::wstring m_title;
+    std::wstring m_artist;
     std::wstring m_folderName;
     std::vector<Chapter> m_chapters;
     std::wstring m_location;

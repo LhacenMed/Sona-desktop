@@ -13,9 +13,14 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
                                            .icon = L"play",
                                            .shortcuts = {{VK_SPACE}},
                                            .run = [&player] { player.togglePause(); },
+                                           .enabled = [&queue] { return queue.current() >= 0; },
                                            .active = [&player] { return player.isPlaying(); }});
-    commands.define(CommandId::Stop,
-                    {.label = L"Stop", .icon = L"stop", .shortcuts = {{'S'}}, .run = [&player] { player.stop([] {}); }});
+    // Stopping goes back to the library.
+    commands.define(CommandId::Stop, {.label = L"Stop",
+                                      .icon = L"stop",
+                                      .shortcuts = {{'S'}},
+                                      .run = [&queue] { queue.stop(); },
+                                      .enabled = [&queue] { return queue.current() >= 0; }});
     commands.define(CommandId::SeekBackward,
                     {.label = L"Seek Backward", .shortcuts = {{VK_LEFT}}, .run = [&player] { player.seekBy(-10); }});
     commands.define(CommandId::SeekForward,
@@ -79,6 +84,14 @@ void defineMainCommands(CommandRegistry &commands, MainWindow &window, Player &p
                                              .run = [&bookmarks, &player] { bookmarks.add(player.position()); },
                                              .enabled = [&bookmarks] { return bookmarks.hasMedia(); }});
     commands.define(CommandId::ToggleFileBrowser, {.label = L"File Browser", .shortcuts = {{'L'}}});
+    commands.define(CommandId::SearchLibrary, {.label = L"Search Library",
+                                               .shortcuts = {{.key = 'E', .control = true}},
+                                               .run = [&window] { window.focusLibrarySearch(); },
+                                               .enabled = [&window] { return window.isLibraryShown(); }});
+    commands.define(CommandId::EditSubtitleTracks, {.label = L"Edit Subtitle Tracks", .icon = L"subtitles"});
+    commands.define(CommandId::EditAudioTracks, {.label = L"Edit Audio Tracks", .icon = L"audio"});
+    commands.define(CommandId::Resync, {.label = L"Resync", .icon = L"refresh"});
+    commands.define(CommandId::MediaInfo, {.label = L"Info", .icon = L"info"});
     commands.define(CommandId::TakeSnapshot, {.label = L"Take a Snapshot",
                                               .shortcuts = {{.key = 'S', .shift = true}},
                                               .run = [&player] { player.takeSnapshot(); }});

@@ -183,6 +183,10 @@ void Player::handleEvent(int type, int videoOutputCount)
                 m_title = fromUtf8(title);
                 libvlc_free(title);
             }
+            if (char *artist = libvlc_media_get_meta(media, libvlc_meta_Artist)) {
+                m_artist = fromUtf8(artist);
+                libvlc_free(artist);
+            }
             libvlc_media_release(media);
         }
         readChapters();
@@ -251,23 +255,26 @@ void Player::setVideoWindow(HWND window)
     });
 }
 
-void Player::open(const std::wstring &location)
+void Player::open(const std::wstring &location, double startTime)
 {
     m_location = location;
     m_opening = true;
     closePreview();
     m_title = displayName(location);
+    m_artist.clear();
     m_folderName = isUrl(location) ? std::wstring() : std::filesystem::path(location).parent_path().filename().wstring();
     m_chapters.clear();
     changed.emit();
 
-    m_engine.post([this, location] {
+    m_engine.post([this, location, startTime] {
         libvlc_media_player_t *player = m_player;
         if (!player)
             return;
         libvlc_media_t *media = newMedia(location);
         if (!media)
             return;
+        if (startTime > 0)
+            libvlc_media_add_option(media, (":start-time=" + std::to_string(startTime)).c_str());
         libvlc_media_player_set_media(player, media);
         libvlc_media_release(media);
         libvlc_media_player_play(player);

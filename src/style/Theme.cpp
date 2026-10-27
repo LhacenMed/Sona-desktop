@@ -41,6 +41,7 @@ Palette makePalette(bool dark, const AccentColors &accent)
         .fgA4 = Color::hex(dark ? 0x404040 : 0x9a9a9a),
         .fgB1 = Color::hex(0x161616),
         .dividerBright = Color::hex(dark ? 0x373737 : 0x9b9b9b),
+        .dividerDim = Color::hex(dark ? 0x222222 : 0xacacac),
         // BG/B2 in Dark, BG/A5 in Light.
         .volumeTrack = Color::hex(dark ? 0x090909 : 0x888888),
         // Dark hover is the Figma "Icon Wrapper" fill; the others are the Windows 11 caption button values.
