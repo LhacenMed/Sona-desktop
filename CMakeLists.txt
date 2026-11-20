@@ -16,10 +16,11 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # VLC Windows release archive (https://download.videolan.org/pub/videolan/vlc/last/win64/).
 set(LIBVLC_DIR "C:/dev/libvlc-3.0.24" CACHE PATH "Root of the libVLC SDK and runtime")
 
+include(cmake/LibVlcImportLibrary.cmake)
 add_library(libvlc SHARED IMPORTED)
 set_target_properties(libvlc PROPERTIES
     IMPORTED_LOCATION "${LIBVLC_DIR}/bin/libvlc.dll"
-    IMPORTED_IMPLIB "${LIBVLC_DIR}/lib/libvlc.lib"
+    IMPORTED_IMPLIB "${LIBVLC_IMPORT_LIBRARY}"
     INTERFACE_INCLUDE_DIRECTORIES "${LIBVLC_DIR}/include"
 )
 

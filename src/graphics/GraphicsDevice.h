@@ -7,6 +7,8 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
+#include <future>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -17,6 +19,10 @@
 
 // The GPU device and factories every window shares: Direct3D 11 for swap chains, Direct2D for
 // drawing, DirectComposition to put the drawing on screen, and DirectWrite with the app font.
+//
+// Creating the Direct3D device loads the display driver, the slowest part of starting the app, so
+// it's created on a thread of its own from the start while the first window and its views are set
+// up (they need only DirectWrite); the first use of the device waits for it.
 class GraphicsDevice
 {
 public:
@@ -25,10 +31,10 @@ public:
     GraphicsDevice(const GraphicsDevice &) = delete;
     GraphicsDevice &operator=(const GraphicsDevice &) = delete;
 
-    ID3D11Device *d3d() const { return m_d3d.Get(); }
-    IDXGIFactory2 *dxgiFactory() const { return m_dxgiFactory.Get(); }
-    ID2D1Device *d2d() const { return m_d2d.Get(); }
-    IDCompositionDevice *composition() const { return m_composition.Get(); }
+    ID3D11Device *d3d() const { return device().d3d.Get(); }
+    IDXGIFactory2 *dxgiFactory() const { return device().dxgiFactory.Get(); }
+    ID2D1Device *d2d() const { return device().d2d.Get(); }
+    IDCompositionDevice *composition() const { return device().composition.Get(); }
 
     // Recreates the device after the GPU was reset or removed (driver update, adapter change).
     void reset();
@@ -44,7 +50,17 @@ public:
     size_t caretIndexAt(std::wstring_view text, const TextStyle &style, float x) const;
 
 private:
-    void createDevice();
+    struct Device
+    {
+        Microsoft::WRL::ComPtr<ID3D11Device> d3d;
+        Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
+        Microsoft::WRL::ComPtr<ID2D1Device> d2d;
+        Microsoft::WRL::ComPtr<IDCompositionDevice> composition;
+    };
+
+    // The device, once the Direct3D one being created is there.
+    const Device &device() const;
+    Device makeDevice(Microsoft::WRL::ComPtr<ID3D11Device> d3d) const;
     IDWriteTextFormat *textFormat(const TextStyle &style) const;
 
     Microsoft::WRL::ComPtr<ID2D1Factory1> m_d2dFactory;
@@ -55,8 +71,6 @@ private:
     const wchar_t *m_iconFontFamily = nullptr;
     mutable std::vector<std::pair<TextStyle, Microsoft::WRL::ComPtr<IDWriteTextFormat>>> m_textFormats;
 
-    Microsoft::WRL::ComPtr<ID3D11Device> m_d3d;
-    Microsoft::WRL::ComPtr<IDXGIFactory2> m_dxgiFactory;
-    Microsoft::WRL::ComPtr<ID2D1Device> m_d2d;
-    Microsoft::WRL::ComPtr<IDCompositionDevice> m_composition;
+    mutable std::future<Microsoft::WRL::ComPtr<ID3D11Device>> m_creatingD3d;
+    mutable std::optional<Device> m_device;
 };

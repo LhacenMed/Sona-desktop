@@ -1,5 +1,7 @@
 #include "playback/Player.h"
 
+#include <delayimp.h>
+
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -102,12 +104,24 @@ struct Player::DurationRequest
 Player::Player()
     : m_restartTimer([this] { restartEngine(true); })
 {
-    m_engine.post([this, arguments = engineArguments(m_preferences)] { startEngine(arguments); });
+    m_engine.post([this, arguments = engineArguments(m_preferences)] {
+        m_startGate.acquire();
+        startEngine(arguments);
+    });
 }
 
 Player::~Player()
 {
+    // The commands still queued need libVLC to run.
+    start();
     m_engine.post([this] { stopEngine(m_player.exchange(nullptr)); });
+}
+
+void Player::start()
+{
+    if (std::exchange(m_started, true))
+        return;
+    m_startGate.release();
 }
 
 std::vector<std::string> Player::engineArguments(const PreferenceValues &preferences)
@@ -213,7 +227,10 @@ void Player::startEngine(const std::vector<std::string> &arguments)
     std::vector<const char *> argv;
     for (const std::string &argument : arguments)
         argv.push_back(argument.c_str());
-    m_vlc = libvlc_new(static_cast<int>(argv.size()), argv.data());
+    // libVLC is linked to load on first use (see src/CMakeLists.txt); loaded here first, so a missing
+    // DLL is the error below rather than a crash.
+    if (SUCCEEDED(__HrLoadAllImportsForDll("libvlc.dll")))
+        m_vlc = libvlc_new(static_cast<int>(argv.size()), argv.data());
     libvlc_media_player_t *player = m_vlc ? libvlc_media_player_new(m_vlc) : nullptr;
     if (!player) {
         m_engine.runOnUiThread([] {

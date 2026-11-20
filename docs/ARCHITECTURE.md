@@ -77,6 +77,13 @@ between features:
   opening media plays. The seek bar's preview comes from a second, silent player decoding into
   memory at keyframes (`Player::previewAt`), drawn in the overlay (`SeekPreview`); the video seeks
   once, exactly, where the bar is let go.
+- **The window comes first.** Before the first frame the UI thread does only what that frame needs, and
+  nothing runs beside it that would hold it up (Windows loads DLLs one at a time). The Direct3D device
+  (the display driver, the slowest part) is created on a thread of its own from the start
+  (`GraphicsDevice`), and the caption buttons are measured on another (`Window::measureCaptionButtons`),
+  while the window and its views are set up; the window's surface comes with its first frame. libVLC is
+  delay-loaded and loads once the window shows (`Player::start`), or at once when launched with media.
+  The window shows with its first frame drawn, so showing it draws nothing again.
 - **libVLC runs off the UI thread.** `Player` queues every command on its engine thread and marshals every
   libVLC event back to the UI thread. Never call libVLC from a view.
 - **Sizes are DIPs from Figma.** Views use the Figma numbers; `Window` scales to the monitor's DPI.

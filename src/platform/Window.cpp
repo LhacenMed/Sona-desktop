@@ -75,9 +75,9 @@ void Window::create(const std::wstring &title, Size size, Size minimumSize, Wind
     const LONG left = work.left + (work.right - work.left - width) / 2;
     const LONG top = work.top + (work.bottom - work.top - height) / 2;
     const DWORD style = (resizable ? WS_OVERLAPPEDWINDOW : WS_POPUP | WS_CAPTION | WS_SYSMENU) | WS_CLIPCHILDREN;
-    createWindow(title, style, 0, {left, top, left + width, top + height}, owner);
     if (resizable)
-        measureCaptionButtons();
+        m_measuringCaptionButtons = std::async(std::launch::async, &Window::measureCaptionButtons, POINT{left, top});
+    createWindow(title, style, 0, {left, top, left + width, top + height}, owner);
 
     m_modal = frame == WindowFrame::Fixed && owner;
     if (m_modal)
@@ -119,7 +119,8 @@ void Window::createWindow(const std::wstring &title, DWORD style, DWORD extended
     // Applies the custom frame (WM_NCCALCSIZE).
     SetWindowPos(m_hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-    m_surface = std::make_unique<WindowSurface>(m_graphics, m_theme, m_hwnd, m_dpi);
+    // The surface comes with the first frame (render()), so the graphics device can still be being
+    // created while the window and its views are set up.
     m_themeSubscription = m_theme.changed.connect([this] {
         applyFrameTheme();
         invalidate();
@@ -133,12 +134,13 @@ void Window::setRoot(std::unique_ptr<View> root)
     layoutRoot();
 }
 
-void Window::measureCaptionButtons()
+// Windows reports the caption buttons' size only for a shown window, and showing the window early
+// would spend its open animation, so they're measured on cloaked stand-ins of the same style at
+// `position` (so on the same monitor, at the same DPI), one restored and one maximized. They're
+// owned by a hidden window, so they never get a taskbar button, and shown without activation, so
+// they never take the focus. Any thread can measure: the windows are its own.
+Window::CaptionButtons Window::measureCaptionButtons(POINT position)
 {
-    // Windows reports the caption buttons' size only for a shown window, and showing this one early
-    // would spend its open animation, so they are measured on cloaked stand-ins of the same style on
-    // the same monitor (so at the same DPI), one restored and one maximized. Owned, they never get a
-    // taskbar button; shown without activation, they never take the focus.
     static const ATOM standInClass = [] {
         WNDCLASSEXW description{sizeof(description)};
         description.lpfnWndProc = DefWindowProcW;
@@ -146,11 +148,12 @@ void Window::measureCaptionButtons()
         description.lpszClassName = L"SonaCaptionStandIn";
         return RegisterClassExW(&description);
     }();
-    RECT window{};
-    GetWindowRect(m_hwnd, &window);
+    const HINSTANCE instance = GetModuleHandleW(nullptr);
+    const HWND owner = CreateWindowExW(0, MAKEINTATOM(standInClass), L"", WS_OVERLAPPED, position.x, position.y, 0, 0,
+                                       nullptr, nullptr, instance, nullptr);
     const auto measure = [&](DWORD state) {
-        const HWND standIn = CreateWindowExW(0, MAKEINTATOM(standInClass), L"", WS_OVERLAPPEDWINDOW | state, window.left,
-                                             window.top, 400, 300, m_hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+        const HWND standIn = CreateWindowExW(0, MAKEINTATOM(standInClass), L"", WS_OVERLAPPEDWINDOW | state, position.x,
+                                             position.y, 400, 300, owner, nullptr, instance, nullptr);
         const BOOL cloaked = TRUE;
         DwmSetWindowAttribute(standIn, DWMWA_CLOAK, &cloaked, sizeof(cloaked));
         ShowWindow(standIn, SW_SHOWNA);
@@ -160,21 +163,30 @@ void Window::measureCaptionButtons()
         return buttons;
     };
     const RECT restored = measure(0);
-    m_captionButtons = {restored.right - restored.left, restored.bottom};
-    m_maximizedCaptionBottom = measure(WS_MAXIMIZE).bottom;
+    const RECT maximized = measure(WS_MAXIMIZE);
+    DestroyWindow(owner);
+    return {{restored.right - restored.left, restored.bottom}, maximized.bottom};
+}
+
+const Window::CaptionButtons &Window::captionButtons() const
+{
+    if (m_measuringCaptionButtons.valid())
+        m_captionButtons = m_measuringCaptionButtons.get();
+    return m_captionButtons;
 }
 
 Size Window::captionButtonSize() const
 {
     const float s = scale();
+    const CaptionButtons &buttons = captionButtons();
     // Unmeasured (a window without a title bar of its own, drawing a picture of one): Windows' sizes.
-    if (m_captionButtons.cx == 0)
+    if (buttons.restored.cx == 0)
         return {46, GetSystemMetricsForDpi(SM_CYCAPTION, static_cast<UINT>(m_dpi)) / s};
-    const float width = m_captionButtons.cx / 3.0f / s;
+    const float width = buttons.restored.cx / 3.0f / s;
     // A maximized window's top edge lies off screen, so only the part below the monitor edge counts.
-    if (isMaximized() && m_maximizedCaptionBottom > 0)
-        return {width, m_maximizedCaptionBottom / s - contentTop()};
-    return {width, m_captionButtons.cy / s};
+    if (isMaximized() && buttons.maximizedBottom > 0)
+        return {width, buttons.maximizedBottom / s - contentTop()};
+    return {width, buttons.restored.cy / s};
 }
 
 bool Window::isMaximized() const
@@ -195,11 +207,23 @@ void Window::show(bool maximized)
     // Laid out again for views added since the root was set, then a plain first showing, which is
     // what Windows plays its open animation on.
     layoutRoot();
+    // Drawn as it will be once shown: a window is activated as it shows, a popup never is.
+    const bool popup = m_frame == WindowFrame::Popup;
+    m_active = !popup;
+    m_invalidated = false;
     render();
-    if (m_frame == WindowFrame::Popup)
-        ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
-    else
-        ShowWindow(m_hwnd, maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
+    m_showing = true;
+    ShowWindow(m_hwnd, popup ? SW_SHOWNOACTIVATE : maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
+    m_showing = false;
+    // The frame on screen is the one drawn above (or, maximized, in WM_SIZE), so the paint Windows
+    // asks for as the window appears would only draw it again, unless a view asked for another
+    // frame since (an animation under way) or Windows didn't activate the window.
+    if (!m_invalidated)
+        ValidateRect(m_hwnd, nullptr);
+    if (!popup && GetActiveWindow() != m_hwnd) {
+        m_active = false;
+        invalidate();
+    }
     // Warm before any popup opens over it, so the first has its backdrop at once; started once it's
     // shown, which starting would hold up.
     if (m_frame == WindowFrame::Resizable)
@@ -239,8 +263,10 @@ void Window::close()
 
 void Window::invalidate()
 {
-    if (m_hwnd)
+    if (m_hwnd) {
+        m_invalidated = true;
         InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
 }
 
 void Window::setFocus(View *view)
@@ -394,8 +420,10 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         wheelScrolled(screenToDips(lParam), static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA);
         return 0;
     case WM_NCACTIVATE:
-        m_active = wParam != FALSE;
-        invalidate();
+        if (m_active != (wParam != FALSE)) {
+            m_active = wParam != FALSE;
+            invalidate();
+        }
         // -1: there is no standard frame for Windows to repaint.
         return DefWindowProcW(m_hwnd, message, wParam, -1);
     case WM_ACTIVATE:
@@ -410,7 +438,8 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         break; // Windows sends WM_SIZE from here.
     }
     case WM_SIZE:
-        if (wParam != SIZE_MINIMIZED && m_surface) {
+        // Showing the window reports the size its first frame was drawn at.
+        if (wParam != SIZE_MINIMIZED && m_surface && !(m_showing && m_surface->fitsWindow())) {
             m_surface->resize();
             layoutRoot();
             render();
@@ -433,13 +462,16 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_DPICHANGED: {
         m_dpi = HIWORD(wParam);
-        m_surface->setDpi(m_dpi);
+        if (m_surface)
+            m_surface->setDpi(m_dpi);
         applyFrameShape();
         const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
         SetWindowPos(m_hwnd, nullptr, suggested->left, suggested->top, suggested->right - suggested->left,
                      suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
-        if (m_frame == WindowFrame::Resizable)
-            measureCaptionButtons();
+        if (m_frame == WindowFrame::Resizable) {
+            m_measuringCaptionButtons = {};
+            m_captionButtons = measureCaptionButtons({suggested->left, suggested->top});
+        }
         layoutRoot();
         invalidate();
         return 0;
@@ -482,6 +514,9 @@ LRESULT Window::handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
         }
         // The surface draws into this window only; its GPU memory goes with it.
         m_surface.reset();
+        if (m_backdropCapture)
+            m_backdropCapture->stop();
+        m_destroying = true;
         destroyed();
         return 0;
     case ownedWindowClosedMessage:
@@ -648,7 +683,9 @@ void Window::layoutRoot()
 
 void Window::render()
 {
-    if (m_surface && m_root) {
+    if (m_hwnd && m_root && !m_destroying) {
+        if (!m_surface)
+            m_surface = std::make_unique<WindowSurface>(m_graphics, m_theme, m_hwnd, m_dpi);
         m_surface->render([this](Canvas &canvas) {
             m_root->paintTree(canvas);
             m_overlay->paintTree(canvas);

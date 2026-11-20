@@ -105,6 +105,14 @@ void WindowSurface::resize()
     createTarget();
 }
 
+bool WindowSurface::fitsWindow() const
+{
+    DXGI_SWAP_CHAIN_DESC1 description{};
+    m_swapChain->GetDesc1(&description);
+    const SIZE size = clientPixels(m_hwnd);
+    return description.Width == static_cast<UINT>(size.cx) && description.Height == static_cast<UINT>(size.cy);
+}
+
 void WindowSurface::setDpi(float dpi)
 {
     m_dpi = dpi;

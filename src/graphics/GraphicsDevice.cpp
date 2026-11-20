@@ -6,7 +6,26 @@
 
 using Microsoft::WRL::ComPtr;
 
+namespace {
+
+ComPtr<ID3D11Device> createD3dDevice()
+{
+    // BGRA support is what lets Direct2D draw into Direct3D surfaces.
+    constexpr UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    ComPtr<ID3D11Device> device;
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION,
+                                 &device, nullptr, nullptr))) {
+        // No usable GPU (e.g. the basic display driver): fall back to the software rasterizer.
+        check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION, &device,
+                                nullptr, nullptr));
+    }
+    return device;
+}
+
+} // namespace
+
 GraphicsDevice::GraphicsDevice()
+    : m_creatingD3d(std::async(std::launch::async, createD3dDevice))
 {
     check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, m_d2dFactory.GetAddressOf()));
     check(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory5),
@@ -42,8 +61,6 @@ GraphicsDevice::GraphicsDevice()
     };
     m_systemFontFamily = installed(Typography::systemFontFamilies);
     m_iconFontFamily = installed(Typography::iconFontFamilies);
-
-    createDevice();
 }
 
 GraphicsDevice::~GraphicsDevice()
@@ -53,35 +70,32 @@ GraphicsDevice::~GraphicsDevice()
     m_dwrite->UnregisterFontFileLoader(m_fontLoader.Get());
 }
 
-void GraphicsDevice::createDevice()
+const GraphicsDevice::Device &GraphicsDevice::device() const
 {
-    // BGRA support is what lets Direct2D draw into Direct3D surfaces.
-    constexpr UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION,
-                                 &m_d3d, nullptr, nullptr))) {
-        // No usable GPU (e.g. the basic display driver): fall back to the software rasterizer.
-        check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, nullptr, 0, D3D11_SDK_VERSION, &m_d3d,
-                                nullptr, nullptr));
-    }
+    if (!m_device)
+        m_device = makeDevice(m_creatingD3d.get());
+    return *m_device;
+}
 
+GraphicsDevice::Device GraphicsDevice::makeDevice(ComPtr<ID3D11Device> d3d) const
+{
+    Device device{std::move(d3d)};
     ComPtr<IDXGIDevice1> dxgiDevice;
-    check(m_d3d.As(&dxgiDevice));
+    check(device.d3d.As(&dxgiDevice));
     // One frame in flight instead of three, so what's drawn follows the pointer without lag.
     check(dxgiDevice->SetMaximumFrameLatency(1));
     ComPtr<IDXGIAdapter> adapter;
     check(dxgiDevice->GetAdapter(&adapter));
-    check(adapter->GetParent(IID_PPV_ARGS(&m_dxgiFactory)));
-    check(m_d2dFactory->CreateDevice(dxgiDevice.Get(), &m_d2d));
-    check(DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(&m_composition)));
+    check(adapter->GetParent(IID_PPV_ARGS(&device.dxgiFactory)));
+    check(m_d2dFactory->CreateDevice(dxgiDevice.Get(), &device.d2d));
+    check(DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(&device.composition)));
+    return device;
 }
 
 void GraphicsDevice::reset()
 {
-    m_composition.Reset();
-    m_d2d.Reset();
-    m_dxgiFactory.Reset();
-    m_d3d.Reset();
-    createDevice();
+    m_device.reset();
+    m_device = makeDevice(createD3dDevice());
     deviceReset.emit();
 }
 

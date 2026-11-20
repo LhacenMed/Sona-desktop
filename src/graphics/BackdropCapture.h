@@ -25,6 +25,9 @@ public:
 
     // Live while a popup shows the backdrop: every change of the window arrives.
     void setLive(bool live);
+    // Stops capturing for good, as the window goes. Called while the message loop still runs: frames
+    // arrive through it, and closing a capture with one on its way waits for it.
+    void stop();
 
     // The latest image of the window, null until there is one; its top-left is at `origin()` on
     // screen, in pixels.
@@ -44,6 +47,7 @@ private:
     GraphicsDevice &m_graphics;
     HWND m_window;
     bool m_live = false;
+    bool m_stopped = false;
     std::unique_ptr<Session> m_session;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> m_image;
     POINT m_origin{};
