@@ -7,6 +7,7 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <semaphore>
 #include <string>
 #include <vector>
 
@@ -55,10 +56,13 @@ struct AudioDevice
 // source of truth; every action is sent to it as a command, and the state below is re-read from it
 // whenever it reports a change.
 //
-// libVLC loads on a worker thread and every command runs there, in order, so the window appears at
-// once and the UI never waits on playback. It's also what keeps the app from deadlocking: libVLC
-// tears its video window down synchronously, which needs the UI thread free to process messages.
-// The state is read, and `changed` emitted, on the UI thread.
+// libVLC loads on a worker thread and every command runs there, in order, so the UI never waits on
+// playback. It's also what keeps the app from deadlocking: libVLC tears its video window down
+// synchronously, which needs the UI thread free to process messages. The state is read, and
+// `changed` emitted, on the UI thread.
+//
+// libVLC loads once start() is called. Loading it while the window is being created would hold the
+// window up: both load DLLs, which Windows does one at a time. Commands sent before then wait for it.
 class Player
 {
 public:
@@ -68,6 +72,9 @@ public:
     ~Player();
     Player(const Player &) = delete;
     Player &operator=(const Player &) = delete;
+
+    // Loads libVLC, then runs the commands sent so far. Only the first call does anything.
+    void start();
 
     bool isPlaying() const { return m_playing; }
     double position() const { return m_position; }
@@ -237,6 +244,9 @@ private:
     PreferenceValues m_preferences;
     // A restart waits for changes to settle, so dragging a slider restarts libVLC once.
     Timer m_restartTimer;
+    // Holds the engine back until start().
+    std::binary_semaphore m_startGate{0};
+    bool m_started = false;
     // Last, so it ends (running the commands still queued) before the state they use goes.
     WorkerThread m_engine;
 };

@@ -110,6 +110,12 @@ void BackdropCapture::setLive(bool live)
         m_session.reset();
 }
 
+void BackdropCapture::stop()
+{
+    m_stopped = true;
+    m_session.reset();
+}
+
 void BackdropCapture::applyRate()
 {
     if (m_session)
@@ -120,7 +126,7 @@ BackdropCapture::~BackdropCapture() = default;
 
 void BackdropCapture::start()
 {
-    if (m_session || !canCaptureWithoutBorder())
+    if (m_session || m_stopped || !canCaptureWithoutBorder())
         return;
     // Capture can still be refused (by policy, for one): the surfaces are opaque then.
     try {

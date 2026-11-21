@@ -117,7 +117,13 @@ target_compile_definitions(sona PRIVATE
 
 target_compile_options(sona PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /MP)
 
-target_link_libraries(sona PRIVATE libvlc sqlite3 windowsapp d3d11 dxgi d2d1 dwrite dcomp dwmapi dxguid imm32 shcore shlwapi)
+target_link_libraries(sona PRIVATE libvlc sqlite3 windowsapp d3d11 dxgi d2d1 dwrite dcomp dwmapi dxguid imm32 shcore shlwapi
+    delayimp)
+# Loaded on first use rather than before the app's first line runs: libVLC (and libvlccore with it)
+# when the player starts, Direct3D on the thread that creates the graphics device, DirectComposition
+# and CoreMessaging (the backdrop capture's dispatcher queue) once the window is being drawn.
+target_link_options(sona PRIVATE /DELAYLOAD:libvlc.dll /DELAYLOAD:d3d11.dll /DELAYLOAD:dcomp.dll
+    /DELAYLOAD:CoreMessaging.dll)
 
 # The libVLC runtime next to the executable, so it runs from the build folder.
 add_custom_command(TARGET sona POST_BUILD

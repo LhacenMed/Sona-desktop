@@ -4,6 +4,7 @@
 #include <shellapi.h>
 
 #include <functional>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -143,7 +144,16 @@ private:
     // The view under a point of the client area, in DIPs: the overlay's first, then the content's.
     View *viewAt(Point point) const;
     int frameThickness() const;
-    void measureCaptionButtons();
+    // Windows' three caption buttons together, in pixels from the window's top edge, restored, and
+    // the bottom of a maximized window's (whose top edge lies off screen).
+    struct CaptionButtons
+    {
+        SIZE restored{};
+        LONG maximizedBottom = 0;
+    };
+    // Once measured: a new window's are measured on a thread of their own while it's set up.
+    const CaptionButtons &captionButtons() const;
+    static CaptionButtons measureCaptionButtons(POINT position);
     void applyFrameShape();
     void updateFrameMargins();
     void applyFrameTheme();
@@ -176,12 +186,16 @@ private:
     float m_dpi = USER_DEFAULT_SCREEN_DPI;
     WindowFrame m_frame = WindowFrame::Resizable;
     Size m_minimumSize;
-    // Windows' three caption buttons together, in pixels from the window's top edge, restored, and
-    // the bottom of a maximized window's (whose top edge lies off screen).
-    SIZE m_captionButtons{};
-    LONG m_maximizedCaptionBottom = 0;
+    mutable std::future<CaptionButtons> m_measuringCaptionButtons;
+    mutable CaptionButtons m_captionButtons;
     int m_frameMarginTop = -1;
     bool m_active = false;
+    // While show() shows the window, whose first frame is drawn already.
+    bool m_showing = false;
+    // Whether invalidate() was called since show() started drawing the first frame.
+    bool m_invalidated = false;
+    // From WM_DESTROY: nothing is drawn any more.
+    bool m_destroying = false;
     bool m_fullScreen = false;
     WINDOWPLACEMENT m_placementBeforeFullScreen{sizeof(WINDOWPLACEMENT)};
     bool m_trackingMouse = false;

@@ -23,6 +23,8 @@ public:
 
     // Matches the swap chain to the window's client size.
     void resize();
+    // Whether the swap chain is the window's client size already.
+    bool fitsWindow() const;
     void setDpi(float dpi);
     void render(const std::function<void(Canvas &)> &paint);
 

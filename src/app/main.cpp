@@ -48,8 +48,13 @@ void runMessageLoop()
 // The player, playing `media` (a path, a folder or a URL) if there is one.
 void runPlayer(const std::wstring &media)
 {
-    // Created first, so libVLC loads while the window is being set up.
+    // First, so the display driver loads (on a thread of its own) while everything else is set up.
+    GraphicsDevice graphics;
     Player player;
+    // Media to play loads libVLC at once, beside the window. Otherwise the window comes first: libVLC
+    // loading beside it would hold it up (Player::start), and nothing needs libVLC until something plays.
+    if (!media.empty())
+        player.start();
     SettingsStore settings;
     Theme theme(settings);
     Database database;
@@ -65,7 +70,6 @@ void runPlayer(const std::wstring &media)
         const QueueItem *playing = queue.currentItem();
         bookmarks.setMedia(playing ? playing->location : std::wstring());
     });
-    GraphicsDevice graphics;
     MainWindow window(graphics, theme, settings, player, queue, bookmarks, history, thumbnails, preset);
 
     // Launching with media opens a player, maximized. An empty launch opens the library at the
@@ -73,6 +77,7 @@ void runPlayer(const std::wstring &media)
     if (!media.empty())
         window.openMedia({media});
     window.show(!media.empty());
+    window.runLater([&player] { player.start(); });
     if (!settings.get(AppSettings::onboardingCompleted))
         window.showOnboarding();
     runMessageLoop();
